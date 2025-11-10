@@ -1,0 +1,92 @@
+[
+    {
+        "user_id": "3",
+        "meta_key": "first_name",
+        "meta_value": "Nelly"
+    },
+    {
+        "user_id": "3",
+        "meta_key": "last_name",
+        "meta_value": "Babillon"
+    },
+    {
+        "user_id": "3",
+        "meta_key": "billing_address_1",
+        "meta_value": "105 rue Vendome"
+    },
+    {
+        "user_id": "3",
+        "meta_key": "billing_city",
+        "meta_value": "Lyon"
+    },
+    {
+        "user_id": "3",
+        "meta_key": "billing_postcode",
+        "meta_value": "69006"
+    },
+    {
+        "user_id": "3",
+        "meta_key": "billing_phone",
+        "meta_value": "0677895623"
+    },
+    {
+        "user_id": "4",
+        "meta_key": "first_name",
+        "meta_value": "Florent"
+    },
+    {
+        "user_id": "4",
+        "meta_key": "last_name",
+        "meta_value": "Soragna"
+    },
+    {
+        "user_id": "4",
+        "meta_key": "billing_address_1",
+        "meta_value": "83 grande rue de la croix rousse"
+    },
+    {
+        "user_id": "4",
+        "meta_key": "billing_city",
+        "meta_value": "lyon"
+    },
+    {
+        "user_id": "4",
+        "meta_key": "billing_postcode",
+        "meta_value": "69004"
+    },
+    {
+        "user_id": "4",
+        "meta_key": "billing_phone",
+        "meta_value": "0607645396"
+    },
+    {
+        "user_id": "5",
+        "meta_key": "first_name",
+        "meta_value": "Admin"
+    },
+    {
+        "user_id": "5",
+        "meta_key": "last_name",
+        "meta_value": ""
+    },
+    {
+        "user_id": "5",
+        "meta_key": "billing_address_1",
+        "meta_value": ""
+    },
+    {
+        "user_id": "5",
+        "meta_key": "billing_city",
+        "meta_value": ""
+    },
+    {
+        "user_id": "5",
+        "meta_key": "billing_postcode",
+        "meta_value": ""
+    },
+    {
+        "user_id": "5",
+        "meta_key": "billing_phone",
+        "meta_value": ""
+    }
+]

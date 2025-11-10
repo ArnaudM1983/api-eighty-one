@@ -3,19 +3,19 @@
 /**
  * Nettoyer les exports JSON de phpMyAdmin (WooCommerce)
  * et préparer les fichiers clean_* pour l'import Symfony.
- * 
  */
 
 $inputFiles = [
-    'mod929_posts.json' => 'clean_posts.json',
-    'mod929_postmeta.json' => 'clean_postmeta.json',
-    'mod929_users.json' => 'clean_users.json',
-    'mod929_usermeta.json' => 'clean_usermeta.json',
-    'mod929_terms.json' => 'clean_categories.json',
-    'mod929_woocommerce_order_items.json' => 'clean_orders.json',
+    'mod929_posts.json'       => 'clean_posts.json',
+    'mod929_postmeta.json'    => 'clean_postmeta.json',
+    'mod929_users.json'       => 'clean_users.json',
+    'mod929_usermeta.json'    => 'clean_usermeta.json',
+    'mod929_categories.json'  => 'clean_categories.json',
+    'mod929_orders.json'      => 'clean_orders.json',
+    'mod929_attachments.json' => 'clean_attachments.json',
 ];
 
-echo "🧹 Nettoyage des fichiers JSON WooCommerce...\n\n";
+echo "Nettoyage des fichiers JSON WooCommerce...\n\n";
 
 foreach ($inputFiles as $input => $output) {
 
@@ -44,25 +44,26 @@ foreach ($inputFiles as $input => $output) {
         continue;
     }
 
-    // --- Nettoyage spécifique selon le type de fichier ---
     $clean = [];
 
     foreach ($data as $row) {
-        // Nettoyage commun
-        if (isset($row['post_status']) && in_array($row['post_status'], ['auto-draft', 'trash', 'inherit', 'revision'])) {
-            continue; // on saute les brouillons / corbeilles
+        // --- Nettoyage commun ---
+        // On saute les brouillons, corbeilles et révisions
+        if (isset($row['post_status']) && in_array($row['post_status'], ['auto-draft', 'trash', 'revision'])) {
+            continue;
         }
 
         // Nettoyage doublons
         $idKey = $row['ID'] ?? $row['id'] ?? $row['post_id'] ?? null;
         if ($idKey && isset($clean[$idKey])) continue;
 
-        // Nettoyage spécifique par fichier
+        // --- Nettoyage spécifique par fichier ---
         switch ($input) {
             case 'mod929_posts.json':
-                // On garde seulement les posts pertinents
                 $postType = $row['post_type'] ?? '';
+                // On garde produits, variantes, attachments
                 if (!in_array($postType, ['product', 'product_variation', 'attachment'])) continue;
+
                 $clean[$idKey] = [
                     'ID' => $row['ID'] ?? null,
                     'post_parent' => $row['post_parent'] ?? '0',
@@ -114,7 +115,7 @@ foreach ($inputFiles as $input => $output) {
                 ];
                 break;
 
-            case 'mod929_terms.json':
+            case 'mod929_categories.json':
                 $clean[] = [
                     'id' => $row['term_id'] ?? $row['id'] ?? null,
                     'name' => $row['name'] ?? '',
@@ -123,12 +124,31 @@ foreach ($inputFiles as $input => $output) {
                 ];
                 break;
 
-            case 'mod929_woocommerce_order_items.json':
+            case 'mod929_orders.json':
                 $clean[] = [
-                    'order_item_id' => $row['order_item_id'] ?? null,
                     'order_id' => $row['order_id'] ?? null,
-                    'order_item_name' => $row['order_item_name'] ?? '',
-                    'order_item_type' => $row['order_item_type'] ?? ''
+                    'post_date' => $row['post_date'] ?? '',
+                    'post_status' => $row['post_status'] ?? '',
+                    'post_excerpt' => $row['post_excerpt'] ?? '',
+                    'post_title' => $row['post_title'] ?? ''
+                ];
+                break;
+
+            case 'mod929_attachments.json':
+                // On garde tous les attachments même avec post_status = 'inherit'
+                if (($row['post_type'] ?? '') !== 'attachment') continue;
+
+                $clean[$idKey] = [
+                    'ID' => $row['ID'] ?? null,
+                    'post_parent' => $row['post_parent'] ?? '0',
+                    'post_title' => $row['post_title'] ?? '',
+                    'post_name' => $row['post_name'] ?? '',
+                    'post_type' => 'attachment',
+                    'post_status' => $row['post_status'] ?? '',
+                    'post_content' => $row['post_content'] ?? '',
+                    'guid' => $row['guid'] ?? null,
+                    'post_excerpt' => $row['post_excerpt'] ?? null,
+                    'post_mime_type' => $row['post_mime_type'] ?? null
                 ];
                 break;
 
@@ -137,12 +157,8 @@ foreach ($inputFiles as $input => $output) {
         }
     }
 
-    // Supprimer les doublons d’ID
-    if (isset($clean[0])) {
-        $clean = array_values(array_unique($clean, SORT_REGULAR));
-    } else {
-        $clean = array_values($clean);
-    }
+    // Supprimer les doublons et re-indexer
+    $clean = array_values($clean);
 
     // Sauvegarde
     file_put_contents(
