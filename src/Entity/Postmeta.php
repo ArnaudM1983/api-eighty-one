@@ -2,6 +2,7 @@
 
 namespace App\Entity;
 
+use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity]
@@ -22,4 +23,45 @@ class PostMeta
     private string $metaValue;
 
     // getters et setters...
+
+    public function getId(): ?int
+    {
+        return $this->id;
+    }
+
+    public function getMetaKey(): ?string
+    {
+        return $this->metaKey;
+    }
+
+    public function setMetaKey(string $metaKey): static
+    {
+        $this->metaKey = $metaKey;
+
+        return $this;
+    }
+
+    public function getMetaValue(): ?string
+    {
+        return $this->metaValue;
+    }
+
+    public function setMetaValue(string $metaValue): static
+    {
+        $this->metaValue = $metaValue;
+
+        return $this;
+    }
+
+    public function getPost(): ?Post
+    {
+        return $this->post;
+    }
+
+    public function setPost(?Post $post): static
+    {
+        $this->post = $post;
+
+        return $this;
+    }
 }
