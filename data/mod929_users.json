@@ -1,0 +1,11 @@
+[
+{"type":"header","version":"5.2.0","comment":"Export to JSON plugin for PHPMyAdmin"},
+{"type":"database","name":"woo-clean"},
+{"type":"table","name":"mod929_users","database":"woo-clean","data":
+[
+{"ID":"3","user_login":"admin625nb","user_email":"contact@nellybabillon.fr","user_registered":"2021-01-21 13:19:12"},
+{"ID":"4","user_login":"flo81-eighty","user_email":"eightyone@hotmail.fr","user_registered":"2021-01-27 14:06:02"},
+{"ID":"5","user_login":"admin625shop","user_email":"admin@eightyonestore.com","user_registered":"2024-01-23 14:53:13"}
+]
+}
+]

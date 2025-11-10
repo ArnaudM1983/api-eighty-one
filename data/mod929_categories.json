@@ -1,0 +1,26 @@
+[
+{"type":"header","version":"5.2.0","comment":"Export to JSON plugin for PHPMyAdmin"},
+{"type":"database","name":"woo-clean"},
+{"type":"table","name":"t","database":"woo-clean","data":
+[
+{"id":"829","name":"Bombes de peinture","slug":"bombes-de-peinture","parent":"0","term_taxonomy_id":"829"},
+{"id":"830","name":"Effets","slug":"effets","parent":"829","term_taxonomy_id":"830"},
+{"id":"831","name":"Classiques","slug":"classiques","parent":"829","term_taxonomy_id":"831"},
+{"id":"832","name":"Urban Wear","slug":"streetwear","parent":"840","term_taxonomy_id":"832"},
+{"id":"833","name":"Techniques","slug":"techniques","parent":"829","term_taxonomy_id":"833"},
+{"id":"834","name":"Caps","slug":"caps","parent":"829","term_taxonomy_id":"834"},
+{"id":"835","name":"Marqueurs et Encres","slug":"marqueurs-et-encres","parent":"0","term_taxonomy_id":"835"},
+{"id":"836","name":"Encres","slug":"encres","parent":"835","term_taxonomy_id":"836"},
+{"id":"837","name":"Squeezers","slug":"squeezers","parent":"835","term_taxonomy_id":"837"},
+{"id":"838","name":"Marqueurs","slug":"marqueurs","parent":"835","term_taxonomy_id":"838"},
+{"id":"839","name":"Marqueurs &amp; Squeezers vides","slug":"marqueurs-squeezers-vides","parent":"835","term_taxonomy_id":"839"},
+{"id":"840","name":"Accessoires &amp; Équipements","slug":"accessoires-equipements","parent":"0","term_taxonomy_id":"840"},
+{"id":"841","name":"Stickers &amp; Book","slug":"stickers-book","parent":"840","term_taxonomy_id":"841"},
+{"id":"842","name":"Protections &amp; Équipements","slug":"protections-equipements","parent":"840","term_taxonomy_id":"842"},
+{"id":"843","name":"Mines de rechange","slug":"mines-de-rechange","parent":"835","term_taxonomy_id":"843"},
+{"id":"844","name":"Acryliques","slug":"acryliques","parent":"829","term_taxonomy_id":"844"},
+{"id":"845","name":"Posca &amp; Uni Paint","slug":"posca-uni-paint","parent":"835","term_taxonomy_id":"845"},
+{"id":"1316","name":"Non classé","slug":"non-classe","parent":"0","term_taxonomy_id":"1316"}
+]
+}
+]
