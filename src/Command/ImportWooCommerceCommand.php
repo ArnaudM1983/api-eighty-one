@@ -38,28 +38,36 @@ class ImportWooCommerceCommand extends Command
     {
         $output->writeln('Début de l’import WooCommerce...');
 
-        // Users
-        $this->importUsers(
+        // -------------------- USERS --------------------
+        $usersById = $this->importUsers(
             __DIR__ . '/../../data/clean_users.json',
             __DIR__ . '/../../data/clean_usermeta.json',
             $output
         );
 
-        // Categories
-        $this->importCategories(
+        // -------------------- CATEGORIES --------------------
+        $categoriesByWooId = $this->importCategories(
             __DIR__ . '/../../data/clean_categories.json',
             $output
         );
 
-        // Products
-        $this->importProducts(
+        // -------------------- PRODUCTS --------------------
+        $productsById = $this->importProducts(
             __DIR__ . '/../../data/clean_posts.json',
             __DIR__ . '/../../data/clean_postmeta.json',
             __DIR__ . '/../../data/clean_attachments.json',
             $output
         );
 
-        // Orders
+        // -------------------- PRODUCT-CATEGORY --------------------
+        $this->importProductCategories(
+            __DIR__ . '/../../data/clean_term_relationships.json',
+            $productsById,
+            $categoriesByWooId,
+            $output
+        );
+
+        // -------------------- ORDERS --------------------
         $this->importOrders(
             __DIR__ . '/../../data/clean_orders.json',
             $output
@@ -70,7 +78,7 @@ class ImportWooCommerceCommand extends Command
     }
 
     // -------------------- USERS --------------------
-    private function importUsers(string $usersJson, string $usermetaJson, OutputInterface $output): void
+    private function importUsers(string $usersJson, string $usermetaJson, OutputInterface $output): array
     {
         $usersData = json_decode(file_get_contents($usersJson), true);
         $metaData = json_decode(file_get_contents($usermetaJson), true);
@@ -80,14 +88,13 @@ class ImportWooCommerceCommand extends Command
         foreach ($usersData as $item) {
             $user = new User();
             $user->setEmail($item['user_email']);
-            $user->setPassword(password_hash('defaultpassword', PASSWORD_BCRYPT)); // mot de passe par défaut
+            $user->setPassword(password_hash('defaultpassword', PASSWORD_BCRYPT));
             $user->setRoles(['ROLE_USER']);
 
             $usersById[$item['ID']] = $user;
             $this->em->persist($user);
         }
 
-        // Ajouter first_name / last_name
         foreach ($metaData as $meta) {
             $userId = $meta['user_id'];
             if (isset($usersById[$userId])) {
@@ -102,13 +109,15 @@ class ImportWooCommerceCommand extends Command
 
         $this->em->flush();
         $output->writeln('<info>' . count($usersById) . ' utilisateurs importés.</info>');
+
+        return $usersById;
     }
 
     // -------------------- CATEGORIES --------------------
-    private function importCategories(string $jsonPath, OutputInterface $output): void
+    private function importCategories(string $jsonPath, OutputInterface $output): array
     {
         $data = json_decode(file_get_contents($jsonPath), true);
-        if (!$data) return;
+        if (!$data) return [];
 
         $categoriesByWooId = [];
 
@@ -140,11 +149,13 @@ class ImportWooCommerceCommand extends Command
             }
         }
         $this->em->flush();
+
         $output->writeln('<info>' . count($categoriesByWooId) . ' catégories importées.</info>');
+        return $categoriesByWooId;
     }
 
     // -------------------- PRODUCTS --------------------
-    private function importProducts(string $postsJson, string $postmetaJson, string $attachmentsJson, OutputInterface $output): void
+    private function importProducts(string $postsJson, string $postmetaJson, string $attachmentsJson, OutputInterface $output): array
     {
         $postsData = json_decode(file_get_contents($postsJson), true);
         $metaData = json_decode(file_get_contents($postmetaJson), true);
@@ -154,12 +165,11 @@ class ImportWooCommerceCommand extends Command
         $variantsById = [];
         $attachmentsById = [];
 
-        // Préparer les attachments
         foreach ($attachmentsData as $att) {
             $attachmentsById[$att['ID']] = $att['guid'];
         }
 
-        // Créer les produits parent
+        // Produits
         foreach ($postsData as $post) {
             if ($post['post_type'] !== 'product' || $post['post_parent'] !== "0") continue;
 
@@ -174,10 +184,9 @@ class ImportWooCommerceCommand extends Command
             $productsById[$post['ID']] = $product;
             $this->em->persist($product);
         }
-
         $this->em->flush();
 
-        // Créer les variantes
+        // Variantes
         foreach ($postsData as $post) {
             if ($post['post_type'] !== 'product' || $post['post_parent'] === "0") continue;
 
@@ -189,17 +198,15 @@ class ImportWooCommerceCommand extends Command
             $variant->setProduct($productsById[$parentId]);
 
             $variantsById[$post['ID']] = $variant;
-            $productsById[$parentId]->addVariant($variant); // Lier la variante au produit
+            $productsById[$parentId]->addVariant($variant);
             $this->em->persist($variant);
         }
-
         $this->em->flush();
 
-        // Ajouter les informations meta
+        // Meta
         foreach ($metaData as $meta) {
             $postId = $meta['post_id'];
 
-            // Parent Product
             if (isset($productsById[$postId])) {
                 $product = $productsById[$postId];
                 switch ($meta['meta_key']) {
@@ -232,7 +239,6 @@ class ImportWooCommerceCommand extends Command
                 }
             }
 
-            // Variante
             if (isset($variantsById[$postId])) {
                 $variant = $variantsById[$postId];
                 switch ($meta['meta_key']) {
@@ -259,8 +265,31 @@ class ImportWooCommerceCommand extends Command
 
         $output->writeln('<info>' . count($productsById) . ' produits importés.</info>');
         $output->writeln('<info>' . count($variantsById) . ' variantes importées.</info>');
+
+        return $productsById;
     }
 
+    // -------------------- PRODUCT-CATEGORY --------------------
+    private function importProductCategories(string $jsonPath, array $productsById, array $categoriesByWooId, OutputInterface $output): void
+    {
+        $data = json_decode(file_get_contents($jsonPath), true);
+        if (!$data) return;
+
+        $count = 0;
+        foreach ($data as $rel) {
+            $productId = $rel['object_id'];
+            $categoryId = $rel['term_taxonomy_id'];
+
+            if (isset($productsById[$productId], $categoriesByWooId[$categoryId])) {
+                $product = $productsById[$productId];
+                $category = $categoriesByWooId[$categoryId];
+                $product->addCategory($category);
+                $count++;
+            }
+        }
+        $this->em->flush();
+        $output->writeln("<info>{$count} relations produit-catégorie créées.</info>");
+    }
 
     // -------------------- ORDERS --------------------
     private function importOrders(string $jsonPath, OutputInterface $output): void
@@ -270,7 +299,6 @@ class ImportWooCommerceCommand extends Command
 
         $importedCount = 0;
 
-        // --- Créer ou récupérer l'utilisateur "Guest" une seule fois ---
         $defaultUser = $this->em->getRepository(User::class)->findOneBy(['email' => 'guest@example.com']);
         if (!$defaultUser) {
             $defaultUser = new User();
@@ -281,13 +309,9 @@ class ImportWooCommerceCommand extends Command
             $this->em->flush();
         }
 
-        // --- Import des commandes ---
         foreach ($data as $item) {
             $order = new Order();
-
-            // Assigner l'utilisateur "Guest"
             $order->setUser($defaultUser);
-
             $order->setStatus($this->mapOrderStatus($item['post_status']));
             $order->setCreatedAt(new \DateTimeImmutable($item['post_date']));
             $order->setUpdatedAt(new \DateTimeImmutable());
@@ -300,7 +324,6 @@ class ImportWooCommerceCommand extends Command
         $this->em->flush();
         $output->writeln("<info>{$importedCount} commandes importées.</info>");
     }
-
 
     private function mapOrderStatus(string $wcStatus): string
     {
