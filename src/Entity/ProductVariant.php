@@ -126,4 +126,6 @@ class ProductVariant
         $this->product = $product;
         return $this;
     }
+
+    
 }
