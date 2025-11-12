@@ -6,13 +6,15 @@
  */
 
 $inputFiles = [
-    'mod929_posts.json'       => 'clean_posts.json',
-    'mod929_postmeta.json'    => 'clean_postmeta.json',
-    'mod929_users.json'       => 'clean_users.json',
-    'mod929_usermeta.json'    => 'clean_usermeta.json',
-    'mod929_categories.json'  => 'clean_categories.json',
-    'mod929_orders.json'      => 'clean_orders.json',
-    'mod929_attachments.json' => 'clean_attachments.json',
+    'mod929_posts.json'               => 'clean_posts.json',
+    'mod929_postmeta.json'            => 'clean_postmeta.json',
+    'mod929_users.json'               => 'clean_users.json',
+    'mod929_usermeta.json'            => 'clean_usermeta.json',
+    'mod929_categories.json'          => 'clean_categories.json',
+    'mod929_orders.json'              => 'clean_orders.json',
+    'mod929_attachments.json'         => 'clean_attachments.json',
+    'mod929_terms.json'               => 'clean_terms.json',
+    'mod929_term_relationships.json' => 'clean_term_relationships.json',
 ];
 
 echo "Nettoyage des fichiers JSON WooCommerce...\n\n";
@@ -48,12 +50,10 @@ foreach ($inputFiles as $input => $output) {
 
     foreach ($data as $row) {
         // --- Nettoyage commun ---
-        // On saute les brouillons, corbeilles et révisions
         if (isset($row['post_status']) && in_array($row['post_status'], ['auto-draft', 'trash', 'revision'])) {
             continue;
         }
 
-        // Nettoyage doublons
         $idKey = $row['ID'] ?? $row['id'] ?? $row['post_id'] ?? null;
         if ($idKey && isset($clean[$idKey])) continue;
 
@@ -61,7 +61,6 @@ foreach ($inputFiles as $input => $output) {
         switch ($input) {
             case 'mod929_posts.json':
                 $postType = $row['post_type'] ?? '';
-                // On garde produits, variantes, attachments
                 if (!in_array($postType, ['product', 'product_variation', 'attachment'])) continue;
 
                 $clean[$idKey] = [
@@ -135,7 +134,6 @@ foreach ($inputFiles as $input => $output) {
                 break;
 
             case 'mod929_attachments.json':
-                // On garde tous les attachments même avec post_status = 'inherit'
                 if (($row['post_type'] ?? '') !== 'attachment') continue;
 
                 $clean[$idKey] = [
@@ -152,15 +150,30 @@ foreach ($inputFiles as $input => $output) {
                 ];
                 break;
 
+            case 'mod929_terms.json':
+                $clean[] = [
+                    'term_id' => $row['term_id'] ?? null,
+                    'name' => $row['name'] ?? '',
+                    'slug' => $row['slug'] ?? '',
+                    'term_group' => $row['term_group'] ?? '0'
+                ];
+                break;
+
+            case 'mod929_term_relationships.json':
+                $clean[] = [
+                    'object_id' => $row['object_id'] ?? null,
+                    'term_taxonomy_id' => $row['term_taxonomy_id'] ?? null,
+                    'term_order' => $row['term_order'] ?? '0'
+                ];
+                break;
+
             default:
                 $clean[] = $row;
         }
     }
 
-    // Supprimer les doublons et re-indexer
     $clean = array_values($clean);
 
-    // Sauvegarde
     file_put_contents(
         $output,
         json_encode($clean, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
