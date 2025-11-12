@@ -10,8 +10,9 @@ use Doctrine\Common\Collections\Collection;
 class User
 {
     #[ORM\Id]
+    #[ORM\GeneratedValue]
     #[ORM\Column(type: "integer")]
-    private int $id;
+    private ?int $id = null;
 
     #[ORM\Column(type: "string", length: 255)]
     private string $userLogin;
@@ -25,7 +26,7 @@ class User
     #[ORM\OneToMany(mappedBy: "user", targetEntity: UserMeta::class)]
     private Collection $metas;
 
-    #[ORM\OneToMany(mappedBy: "user", targetEntity: Order::class)]
+    #[ORM\OneToMany(mappedBy: "user", targetEntity: CustomOrder::class)]
     private Collection $orders;
 
     public function __construct()
@@ -34,7 +35,7 @@ class User
         $this->orders = new ArrayCollection();
     }
 
-    // getters et setters...
+    // Getters and Setters
 
     public function getId(): ?int
     {
@@ -115,7 +116,7 @@ class User
         return $this->orders;
     }
 
-    public function addOrder(Order $order): static
+    public function addOrder(CustomOrder $order): static
     {
         if (!$this->orders->contains($order)) {
             $this->orders->add($order);
@@ -125,7 +126,7 @@ class User
         return $this;
     }
 
-    public function removeOrder(Order $order): static
+    public function removeOrder(CustomOrder $order): static
     {
         if ($this->orders->removeElement($order)) {
             // set the owning side to null (unless already changed)

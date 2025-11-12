@@ -9,8 +9,9 @@ use Doctrine\ORM\Mapping as ORM;
 class PostMeta
 {
     #[ORM\Id]
+    #[ORM\GeneratedValue]
     #[ORM\Column(type: "integer")]
-    private int $id;
+    private ?int $id = null;
 
     #[ORM\ManyToOne(targetEntity: Post::class, inversedBy: "metas")]
     #[ORM\JoinColumn(name: "post_id", referencedColumnName: "id")]
@@ -22,7 +23,7 @@ class PostMeta
     #[ORM\Column(type: "text")]
     private string $metaValue;
 
-    // getters et setters...
+    // Getters and Setters
 
     public function getId(): ?int
     {

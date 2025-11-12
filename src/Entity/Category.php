@@ -10,8 +10,9 @@ use Doctrine\Common\Collections\Collection;
 class Category
 {
     #[ORM\Id]
+    #[ORM\GeneratedValue]
     #[ORM\Column(type: "integer")]
-    private int $id;
+    private ?int $id = null;
 
     #[ORM\Column(type: "string", length: 255)]
     private string $name;
@@ -33,7 +34,7 @@ class Category
         $this->posts = new ArrayCollection();
     }
 
-    // getters et setters...
+    // Getters and Setters
 
     public function getId(): ?int
     {

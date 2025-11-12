@@ -9,8 +9,9 @@ use Doctrine\ORM\Mapping as ORM;
 class Attachment
 {
     #[ORM\Id]
+    #[ORM\GeneratedValue]
     #[ORM\Column(type: "integer")]
-    private int $id;
+    private ?int $id = null;
 
     #[ORM\ManyToOne(targetEntity: Post::class, inversedBy: "attachments")]
     #[ORM\JoinColumn(name: "post_parent", referencedColumnName: "id", nullable: true)]
@@ -40,7 +41,7 @@ class Attachment
     #[ORM\Column(type: "string", length: 50, nullable: true)]
     private ?string $postMimeType = null;
 
-    // getters et setters...
+    // Getters and Setters
 
     public function getId(): ?int
     {

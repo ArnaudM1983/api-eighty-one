@@ -6,11 +6,12 @@ use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity]
-class Order
+class CustomOrder
 {
     #[ORM\Id]
+    #[ORM\GeneratedValue]
     #[ORM\Column(type: "integer")]
-    private int $orderId;
+    private ?int $orderId = null;
 
     #[ORM\Column(type: "datetime")]
     private \DateTimeInterface $postDate;
@@ -28,7 +29,7 @@ class Order
     #[ORM\JoinColumn(name: "user_id", referencedColumnName: "id", nullable: true)]
     private ?User $user = null;
 
-    // getters et setters...
+    // Getters and Setters
 
     public function getOrderId(): ?int
     {
