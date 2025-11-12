@@ -1,0 +1,110 @@
+[
+    {
+        "id": "829",
+        "name": "Bombes de peinture",
+        "slug": "bombes-de-peinture",
+        "parent": "0"
+    },
+    {
+        "id": "830",
+        "name": "Effets",
+        "slug": "effets",
+        "parent": "829"
+    },
+    {
+        "id": "831",
+        "name": "Classiques",
+        "slug": "classiques",
+        "parent": "829"
+    },
+    {
+        "id": "832",
+        "name": "Urban Wear",
+        "slug": "streetwear",
+        "parent": "840"
+    },
+    {
+        "id": "833",
+        "name": "Techniques",
+        "slug": "techniques",
+        "parent": "829"
+    },
+    {
+        "id": "834",
+        "name": "Caps",
+        "slug": "caps",
+        "parent": "829"
+    },
+    {
+        "id": "835",
+        "name": "Marqueurs et Encres",
+        "slug": "marqueurs-et-encres",
+        "parent": "0"
+    },
+    {
+        "id": "836",
+        "name": "Encres",
+        "slug": "encres",
+        "parent": "835"
+    },
+    {
+        "id": "837",
+        "name": "Squeezers",
+        "slug": "squeezers",
+        "parent": "835"
+    },
+    {
+        "id": "838",
+        "name": "Marqueurs",
+        "slug": "marqueurs",
+        "parent": "835"
+    },
+    {
+        "id": "839",
+        "name": "Marqueurs &amp; Squeezers vides",
+        "slug": "marqueurs-squeezers-vides",
+        "parent": "835"
+    },
+    {
+        "id": "840",
+        "name": "Accessoires &amp; Équipements",
+        "slug": "accessoires-equipements",
+        "parent": "0"
+    },
+    {
+        "id": "841",
+        "name": "Stickers &amp; Book",
+        "slug": "stickers-book",
+        "parent": "840"
+    },
+    {
+        "id": "842",
+        "name": "Protections &amp; Équipements",
+        "slug": "protections-equipements",
+        "parent": "840"
+    },
+    {
+        "id": "843",
+        "name": "Mines de rechange",
+        "slug": "mines-de-rechange",
+        "parent": "835"
+    },
+    {
+        "id": "844",
+        "name": "Acryliques",
+        "slug": "acryliques",
+        "parent": "829"
+    },
+    {
+        "id": "845",
+        "name": "Posca &amp; Uni Paint",
+        "slug": "posca-uni-paint",
+        "parent": "835"
+    },
+    {
+        "id": "1316",
+        "name": "Non classé",
+        "slug": "non-classe",
+        "parent": "0"
+    }
+]
