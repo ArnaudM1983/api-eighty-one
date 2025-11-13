@@ -30,7 +30,7 @@ class ProductVariantController extends AbstractController
      * Description: Retrieve all variants.
      **/
     #[Route('', methods: ['GET'])]
-    public function list(): JsonResponse
+    public function getAll(): JsonResponse
     {
         $variants = $this->repo->findAll();
         $data = array_map(fn(ProductVariant $v) => $this->serializeVariant($v), $variants);
@@ -45,7 +45,7 @@ class ProductVariantController extends AbstractController
      * Description: Retrieve details of a specific variant.
      **/
     #[Route('/{id}', methods: ['GET'])]
-    public function show(ProductVariant $variant): JsonResponse
+    public function getOne(ProductVariant $variant): JsonResponse
     {
         return $this->json($this->serializeVariant($variant));
     }
@@ -53,7 +53,7 @@ class ProductVariantController extends AbstractController
     /**
      * CRUD: Create
      * HTTP Method: POST
-     * URL: /api/products
+     * URL: /api/variants
      * Description: Create a new variant.
      **/
     #[Route('', methods: ['POST'])]
@@ -80,6 +80,12 @@ class ProductVariantController extends AbstractController
         return $this->json(['message' => 'Variant created', 'id' => $variant->getId()], 201);
     }
 
+    /**
+     * CRUD: Update
+     * HTTP Method: PUT
+     * URL: /api/variants/{id}
+     * Description: Update an variant.
+     **/
     #[Route('/{id}', methods: ['PUT'])]
     public function update(Request $request, ProductVariant $variant): JsonResponse
     {
@@ -102,6 +108,12 @@ class ProductVariantController extends AbstractController
         return $this->json(['message' => 'Variant updated']);
     }
 
+    /**
+     * CRUD: Delete
+     * HTTP Method: DELETE
+     * URL: /api/variants/{id}
+     * Description: Delete an existing variant.
+     **/
     #[Route('/{id}', methods: ['DELETE'])]
     public function delete(ProductVariant $variant): JsonResponse
     {

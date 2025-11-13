@@ -31,7 +31,7 @@ class ProductController extends AbstractController
      * Description: Retrieve all products with categories, images, and variants.
      **/
     #[Route('', methods: ['GET'])]
-    public function list(): JsonResponse
+    public function getAll(): JsonResponse
     {
         $products = $this->repo->findAll();
         $data = array_map(fn(Product $p) => $this->serializeProduct($p), $products);
@@ -46,7 +46,7 @@ class ProductController extends AbstractController
      * Description: Retrieve details of a specific product with categories, images, and variants.
      **/
     #[Route('/{id}', methods: ['GET'])]
-    public function show(Product $product): JsonResponse
+    public function getOne(Product $product): JsonResponse
     {
         return $this->json($this->serializeProduct($product));
     }
@@ -70,6 +70,13 @@ class ProductController extends AbstractController
         $product->setSku($data['sku'] ?? null);
         $product->setPrice($data['price'] ?? null);
         $product->setStock($data['stock'] ?? null);
+        // --------------------------------------------------
+        // TODO: Stockage local pour main_image
+        // Stockage des images sur le serveur local,
+        // remplacer le champ 'main_image' par un upload via FileType ou multipart/form-data,
+        // déplacer le fichier dans /public/uploads/products/ et stocker l'URL relative ici :
+        // $product->setMainImage('/uploads/products/'.$newFilename);
+        // --------------------------------------------------
         $product->setMainImage($data['main_image'] ?? null);
 
         // Categories
@@ -79,6 +86,13 @@ class ProductController extends AbstractController
         }
 
         // Images
+        // --------------------------------------------------
+        // TODO: Stockage local pour images supplémentaires
+        // Pour chaque image :
+        // 1. Recevoir un fichier via FileType / multipart/form-data
+        // 2. Déplacer le fichier dans /public/uploads/products/
+        // 3. Stocker l'URL relative dans $image->setUrl('/uploads/products/'.$newFilename)
+        // --------------------------------------------------
         foreach ($data['images'] ?? [] as $imgData) {
             $image = new ProductImage();
             $image->setUrl($imgData['url']);
@@ -110,6 +124,10 @@ class ProductController extends AbstractController
         if (isset($data['sku'])) $product->setSku($data['sku']);
         if (isset($data['price'])) $product->setPrice($data['price']);
         if (isset($data['stock'])) $product->setStock($data['stock']);
+        // --------------------------------------------------
+        // TODO: Update stockage local pour main_image
+        // Remplacer 'main_image' par l'upload local si nécessaire
+        // --------------------------------------------------
         if (isset($data['main_image'])) $product->setMainImage($data['main_image']);
 
         // Update categories
@@ -122,6 +140,12 @@ class ProductController extends AbstractController
         }
 
         // Update images
+        // --------------------------------------------------
+        // TODO: Update stockage local pour images supplémentaires
+        // Supprimer les images existantes si nécessaire
+        // Puis uploader les nouveaux fichiers dans /public/uploads/products/
+        // et stocker les URLs relatives
+        // --------------------------------------------------
         if (isset($data['images'])) {
             $product->getImages()->clear();
             foreach ($data['images'] as $imgData) {
