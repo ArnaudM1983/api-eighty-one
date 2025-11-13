@@ -179,6 +179,10 @@ class ProductController extends AbstractController
 
     private function serializeProduct(Product $p): array
     {
+        // Helper pour formater les URLs d'images locales correctement
+        $formatImagePath = fn(?string $path) =>
+        $path ? '/' . ltrim($path, '/') : null;
+
         return [
             'id' => $p->getId(),
             'name' => $p->getName(),
@@ -188,18 +192,25 @@ class ProductController extends AbstractController
             'sku' => $p->getSku(),
             'price' => $p->getPrice(),
             'stock' => $p->getStock(),
-            'main_image' => $p->getMainImage(),
+            'main_image' => $formatImagePath($p->getMainImage()),
             'created_at' => $p->getCreatedAt()->format('Y-m-d H:i:s'),
             'updated_at' => $p->getUpdatedAt()->format('Y-m-d H:i:s'),
-            'categories' => $p->getCategories()->map(fn($c) => ['id' => $c->getId(), 'name' => $c->getName()])->toArray(),
-            'images' => $p->getImages()->map(fn($i) => ['id' => $i->getId(), 'url' => $i->getUrl(), 'alt' => $i->getAlt()])->toArray(),
+            'categories' => $p->getCategories()->map(fn($c) => [
+                'id' => $c->getId(),
+                'name' => $c->getName()
+            ])->toArray(),
+            'images' => $p->getImages()->map(fn($i) => [
+                'id' => $i->getId(),
+                'url' => $formatImagePath($i->getUrl()),
+                'alt' => $i->getAlt()
+            ])->toArray(),
             'variants' => $p->getVariants()->map(fn($v) => [
                 'id' => $v->getId(),
                 'name' => $v->getName(),
                 'sku' => $v->getSku(),
                 'price' => $v->getPrice(),
                 'stock' => $v->getStock(),
-                'image' => $v->getImage(),
+                'image' => $formatImagePath($v->getImage()), 
                 'attributes' => $v->getAttributes()
             ])->toArray()
         ];

@@ -125,13 +125,15 @@ class ProductVariantController extends AbstractController
 
     private function serializeVariant(ProductVariant $v): array
     {
+        $formatImagePath = fn(?string $path) => $path ? '/' . ltrim($path, '/') : null;
+
         return [
             'id' => $v->getId(),
             'name' => $v->getName(),
             'sku' => $v->getSku(),
             'price' => $v->getPrice(),
             'stock' => $v->getStock(),
-            'image' => $v->getImage(),
+            'image' => $formatImagePath($v->getImage()), 
             'attributes' => $v->getAttributes(),
             'product' => $v->getProduct() ? ['id' => $v->getProduct()->getId(), 'name' => $v->getProduct()->getName()] : null
         ];
