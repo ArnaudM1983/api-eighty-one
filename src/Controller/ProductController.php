@@ -6,6 +6,7 @@ use App\Entity\Product;
 use App\Entity\ProductImage;
 use App\Entity\Category;
 use App\Repository\ProductRepository;
+use App\Repository\CategoryRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
@@ -40,6 +41,31 @@ class ProductController extends AbstractController
     }
 
     /**
+     * CRUD: Search products by name
+     * HTTP Method: GET
+     * URL: /api/products/search?q=terme
+     **/
+    #[Route('/search', methods: ['GET'])]
+    public function search(Request $request): JsonResponse
+    {
+        $q = $request->query->get('q', '');
+        if (!$q) {
+            return $this->json(['error' => 'Query parameter "q" is required'], 400);
+        }
+
+        $products = $this->repo->createQueryBuilder('p')
+            ->andWhere('p.name LIKE :q')
+            ->setParameter('q', '%' . $q . '%')
+            ->orderBy('p.name', 'ASC')
+            ->getQuery()
+            ->getResult();
+
+        $data = array_map(fn(Product $p) => $this->serializeProduct($p), $products);
+
+        return $this->json($data);
+    }
+
+    /**
      * CRUD: Read (Detail)
      * HTTP Method: GET
      * URL: /api/products/{id}
@@ -50,6 +76,25 @@ class ProductController extends AbstractController
     {
         return $this->json($this->serializeProduct($product));
     }
+
+    /**
+     * CRUD: Read (Detail)
+     * HTTP Method: GET
+     * URL: /api/products/{id}
+     * Description: Retrieve details of a specific product with categories, images, and variants.
+     **/
+    #[Route('/slug/{slug}', methods: ['GET'])]
+    public function getBySlug(string $slug): JsonResponse
+    {
+        $product = $this->repo->findOneBy(['slug' => $slug]);
+
+        if (!$product) {
+            return $this->json(['error' => 'Product not found'], 404);
+        }
+
+        return $this->json($this->serializeProduct($product));
+    }
+
 
     /**
      * CRUD: Create
@@ -70,6 +115,7 @@ class ProductController extends AbstractController
         $product->setSku($data['sku'] ?? null);
         $product->setPrice($data['price'] ?? null);
         $product->setStock($data['stock'] ?? null);
+        $product->setFeatured($data['featured'] ?? false);
         // --------------------------------------------------
         // TODO: Stockage local pour main_image
         // Stockage des images sur le serveur local,
@@ -124,6 +170,7 @@ class ProductController extends AbstractController
         if (isset($data['sku'])) $product->setSku($data['sku']);
         if (isset($data['price'])) $product->setPrice($data['price']);
         if (isset($data['stock'])) $product->setStock($data['stock']);
+        if (isset($data['featured'])) $product->setFeatured($data['featured']);
         // --------------------------------------------------
         // TODO: Update stockage local pour main_image
         // Remplacer 'main_image' par l'upload local si nécessaire
@@ -177,11 +224,65 @@ class ProductController extends AbstractController
         return $this->json(['message' => 'Product deleted']);
     }
 
+    /**
+     * HTTP Method: GET
+     * URL: /api/products/category/{slug}
+     * Description: Retrieve all parent products of a category (no variants).
+     **/
+    #[Route('/category/{slug}', methods: ['GET'])]
+    public function getByCategory(string $slug, CategoryRepository $categoryRepo): JsonResponse
+    {
+        $category = $categoryRepo->findOneBy(['slug' => $slug]);
+
+        if (!$category) {
+            return $this->json(['error' => 'Category not found'], 404);
+        }
+
+        $products = $this->repo->findByCategory($category);
+
+        // Use the NEW serializer without variants
+        $data = array_map(fn(Product $p) => $this->serializeProductWithoutVariants($p), $products);
+
+        return $this->json($data);
+    }
+
+    /**
+     * HTTP Method: GET
+     * URL: /api/products/{id}/stock
+     * Description: Retrieve the current stock of a product.
+     **/
+    #[Route('/{id}/stock', methods: ['GET'])]
+    public function getStock(Product $product): JsonResponse
+    {
+        return $this->json([
+            'stock' => $product->getStock()
+        ]);
+    }
+
+    private function serializeProductWithoutVariants(Product $product): array
+    {
+        return [
+            'id' => $product->getId(),
+            'name' => $product->getName(),
+            'slug' => $product->getSlug(),
+            'description' => $product->getDescription(),
+            'excerpt' => $product->getExcerpt(),
+            'sku' => $product->getSku(),
+            'price' => $product->getPrice(),
+            'stock' => $product->getStock(),
+            'featured' => $product->isFeatured(),
+            'main_image' => $product->getMainImage(),
+            'created_at' => $product->getCreatedAt()?->format('Y-m-d H:i:s'),
+            'updated_at' => $product->getUpdatedAt()?->format('Y-m-d H:i:s'),
+        ];
+    }
+
     private function serializeProduct(Product $p): array
     {
-        // Helper pour formater les URLs d'images locales correctement
-        $formatImagePath = fn(?string $path) =>
-        $path ? '/' . ltrim($path, '/') : null;
+        $formatImagePath = fn(?string $path) => $path ? '/' . ltrim($path, '/') : null;
+
+        $variants = $p->getVariants()->toArray();
+        $variantCount = count($variants);
 
         return [
             'id' => $p->getId(),
@@ -192,27 +293,31 @@ class ProductController extends AbstractController
             'sku' => $p->getSku(),
             'price' => $p->getPrice(),
             'stock' => $p->getStock(),
+            'featured' => $p->isFeatured(),
             'main_image' => $formatImagePath($p->getMainImage()),
             'created_at' => $p->getCreatedAt()->format('Y-m-d H:i:s'),
             'updated_at' => $p->getUpdatedAt()->format('Y-m-d H:i:s'),
             'categories' => $p->getCategories()->map(fn($c) => [
                 'id' => $c->getId(),
-                'name' => $c->getName()
+                'name' => $c->getName(),
+                'slug' => $c->getSlug(),
             ])->toArray(),
             'images' => $p->getImages()->map(fn($i) => [
                 'id' => $i->getId(),
                 'url' => $formatImagePath($i->getUrl()),
                 'alt' => $i->getAlt()
             ])->toArray(),
-            'variants' => $p->getVariants()->map(fn($v) => [
+            'variants' => array_map(fn($v) => [
                 'id' => $v->getId(),
                 'name' => $v->getName(),
                 'sku' => $v->getSku(),
                 'price' => $v->getPrice(),
                 'stock' => $v->getStock(),
-                'image' => $formatImagePath($v->getImage()), 
+                'image' => $formatImagePath($v->getImage()),
                 'attributes' => $v->getAttributes()
-            ])->toArray()
+            ], $variants),
+            'variant_count' => $variantCount,
+            'has_variants' => $variantCount > 0,
         ];
     }
 }

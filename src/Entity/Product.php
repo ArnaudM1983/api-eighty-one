@@ -39,6 +39,9 @@ class Product
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $mainImage = null;
 
+    #[ORM\Column(type: 'boolean')]
+    private bool $featured = false;
+
     #[ORM\Column(type: 'datetime')]
     private \DateTimeInterface $createdAt;
 
@@ -188,6 +191,18 @@ class Product
     public function setUpdatedAt(\DateTimeInterface $updatedAt): self
     {
         $this->updatedAt = $updatedAt;
+        return $this;
+    }
+
+    // Best Sellers  – Boolean true/false - This will be a toggle in the back office
+    public function isFeatured(): bool
+    {
+        return $this->featured;
+    }
+
+    public function setFeatured(bool $featured): self
+    {
+        $this->featured = $featured;
         return $this;
     }
 

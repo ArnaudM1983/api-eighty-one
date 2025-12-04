@@ -20,6 +20,9 @@ class Order
     #[ORM\JoinColumn(nullable: false)]
     private ?User $user = null;
 
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $cartToken = null;
+
     #[ORM\Column(type: 'decimal', precision: 10, scale: 2)]
     private ?string $total = null;
 
@@ -43,6 +46,17 @@ class Order
     }
 
     // Getters & Setters ...
+
+    public function getCartToken(): ?string
+    {
+        return $this->cartToken;
+    }
+
+    public function setCartToken(?string $cartToken): self
+    {
+        $this->cartToken = $cartToken;
+        return $this;
+    }
 
     // ID
     public function getId(): ?int
