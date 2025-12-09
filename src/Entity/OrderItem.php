@@ -25,6 +25,9 @@ class OrderItem
     #[ORM\Column]
     private int $quantity = 1;
 
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $weight = null;
+
     #[ORM\Column(type: 'decimal', precision: 10, scale: 2)]
     private ?string $price = null;
 
@@ -44,7 +47,15 @@ class OrderItem
     public function getPrice(): float { return (float) $this->price; }
     public function setPrice(string $price): self { $this->price = $price; return $this; }
 
+    public function getWeight(): ?float { return $this->weight; }
+    public function setWeight(?float $weight): self { $this->weight = $weight; return $this; }
+
+    public function getTotalWeight(): float {
+        return ($this->weight ?? 0.0) * $this->quantity;
+    }
+
     public function getTotalPrice(): float {
         return $this->getQuantity() * $this->getPrice();
     }
+
 }

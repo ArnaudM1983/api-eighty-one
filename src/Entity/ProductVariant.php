@@ -25,6 +25,9 @@ class ProductVariant
     #[ORM\Column(nullable: true)]
     private ?int $stock = null;
 
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $weight = null;
+
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $image = null;
 
@@ -88,6 +91,18 @@ class ProductVariant
     public function setStock(?int $stock): self
     {
         $this->stock = $stock;
+        return $this;
+    }
+
+    // Weight
+    public function getWeight(): ?float
+    {
+        return $this->weight;
+    }
+
+    public function setWeight(?float $weight): self
+    {
+        $this->weight = $weight;
         return $this;
     }
 

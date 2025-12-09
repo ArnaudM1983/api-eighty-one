@@ -111,4 +111,16 @@ class Cart
             array_map(fn($item) => $item->getPrice() * $item->getQuantity(), $this->items->toArray())
         );
     }
+
+    /**
+     * Total weight of all items in the cart (sum of all item.weight * quantity)
+     */
+    public function getTotalWeight(): float
+    {
+        if (!$this->items) return 0.0;
+
+        return array_sum(
+            array_map(fn($item) => $item->getTotalWeight(), $this->items->toArray())
+        );
+    }
 }

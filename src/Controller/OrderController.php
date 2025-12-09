@@ -12,8 +12,8 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Annotation\Route;
-use Symfony\Component\Serializer\SerializerInterface; 
-use Symfony\Component\Validator\Validator\ValidatorInterface; 
+use Symfony\Component\Serializer\SerializerInterface;
+use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 class OrderController extends AbstractController
 {
@@ -21,7 +21,7 @@ class OrderController extends AbstractController
     public function __construct(
         private EntityManagerInterface $em,
         private SerializerInterface $serializer,
-        private ValidatorInterface $validator 
+        private ValidatorInterface $validator
     ) {}
 
     /**
@@ -35,26 +35,10 @@ class OrderController extends AbstractController
     {
         $data = json_decode($request->getContent(), true);
         $cartToken = $data['cartToken'] ?? null;
-
-        if (!$cartToken) {
-            return $this->json(['error' => 'Cart token manquant'], 400);
-        }
-
-        // Récupération du panier
         $cart = $em->getRepository(Cart::class)->findOneBy(['token' => $cartToken]);
-        if (!$cart) {
-            return $this->json(['error' => 'Panier introuvable'], 404);
-        }
 
         // Création de la commande
         $order = new Order();
-
-        // Si utilisateur connecté, on le lie ; sinon user reste null
-        if ($this->getUser()) {
-            $order->setUser($this->getUser());
-        }
-
-        $order->setCartToken($cart->getToken());
 
         // Création des OrderItems à partir du panier
         foreach ($cart->getItems() as $cartItem) {
@@ -63,18 +47,25 @@ class OrderController extends AbstractController
             $orderItem->setVariant($cartItem->getVariant());
             $orderItem->setQuantity($cartItem->getQuantity());
             $orderItem->setPrice($cartItem->getPrice());
+
+            // Stocker le poids unitaire dans l'item
+            $orderItem->setWeight($cartItem->getWeight());
+
             $order->addItem($orderItem);
         }
 
         // Calcul et stockage du total
         $order->setTotal($order->getTotal());
 
+        // Stocker le poids total dans la commande
+        $order->setTotalWeight($cart->getTotalWeight());
+
         // Création d’un paiement initial en status pending
         $payment = new Payment();
         $payment->setOrder($order);
         $payment->setAmount($order->getTotal());
         $payment->setStatus('pending');
-        $payment->setMethod(''); // sera défini plus tard selon le choix du client
+        $payment->setMethod('');
         $em->persist($payment);
 
         // Persist et flush
@@ -85,7 +76,8 @@ class OrderController extends AbstractController
         return $this->json([
             'success' => true,
             'orderId' => $order->getId(),
-            'total' => $order->getTotal()
+            'total' => $order->getTotal(),
+            'totalWeight' => $order->getTotalWeight() 
         ]);
     }
 
@@ -105,7 +97,6 @@ class OrderController extends AbstractController
             return $this->json(['error' => 'Commande introuvable'], 404);
         }
 
-        // Préparer les items de la commande
         $items = array_map(function ($item) {
             return [
                 'orderItemId' => $item->getId(),
@@ -114,11 +105,12 @@ class OrderController extends AbstractController
                 'name' => $item->getProduct()?->getName(),
                 'quantity' => $item->getQuantity(),
                 'price' => $item->getPrice(),
-                'total' => $item->getPrice() * $item->getQuantity(),
+                'total' => $item->getTotalPrice(),
+                'weight' => $item->getWeight(), 
+                'totalWeight' => $item->getTotalWeight(), 
             ];
         }, $order->getItems()->toArray());
 
-        // Préparer les paiements liés
         $payments = array_map(function ($payment) {
             return [
                 'paymentId' => $payment->getId(),
@@ -133,11 +125,12 @@ class OrderController extends AbstractController
             'orderId' => $order->getId(),
             'cartToken' => $order->getCartToken(),
             'total' => $order->getTotal(),
+            'totalWeight' => $order->getTotalWeight(),
             'status' => $order->getStatus(),
             'createdAt' => $order->getCreatedAt()->format('Y-m-d H:i:s'),
             'updatedAt' => $order->getUpdatedAt()->format('Y-m-d H:i:s'),
             'items' => $items,
-            'payments' => $payments,
+            'payments' => $payments, 
         ]);
     }
 
@@ -152,7 +145,7 @@ class OrderController extends AbstractController
     {
         try {
             $shippingInfo = $order->getShippingInfo();
-            
+
             if (!$shippingInfo) {
                 $shippingInfo = new ShippingInfo();
                 $shippingInfo->setOrder($order);
@@ -190,13 +183,12 @@ class OrderController extends AbstractController
                 'message' => 'Informations de livraison enregistrées avec succès.',
                 'shippingInfoId' => $shippingInfo->getId()
             ], 200);
-
         } catch (\Exception $e) {
             // Gérer les erreurs inattendues (JSON mal formé, etc.)
             return $this->json([
                 'error' => 'Erreur inattendue.',
                 'details' => $e->getMessage()
-            ], 400); 
+            ], 400);
         }
     }
 }
