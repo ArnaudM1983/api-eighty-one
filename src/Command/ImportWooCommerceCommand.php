@@ -220,6 +220,11 @@ class ImportWooCommerceCommand extends Command
                     case '_stock':
                         $product->setStock((int)$meta['meta_value']);
                         break;
+                    case '_weight':
+                        if (!empty($meta['meta_value'])) {
+                            $product->setWeight((float)$meta['meta_value']);
+                        }
+                        break;
                     case '_thumbnail_id':
                         if (isset($attachmentsById[$meta['meta_value']])) {
                             $product->setMainImage($attachmentsById[$meta['meta_value']]);
@@ -251,6 +256,11 @@ class ImportWooCommerceCommand extends Command
                         break;
                     case '_stock':
                         $variant->setStock((int)$meta['meta_value']);
+                        break;
+                    case '_weight': 
+                        if (!empty($meta['meta_value'])) {
+                            $variant->setWeight((float)$meta['meta_value']);
+                        }
                         break;
                     case '_thumbnail_id':
                         if (isset($attachmentsById[$meta['meta_value']])) {

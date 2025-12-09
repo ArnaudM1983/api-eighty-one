@@ -112,7 +112,8 @@ class CartController extends AbstractController
         }
 
         $price = $variant ? $variant->getPrice() : $product->getPrice();
-
+        $unitWeight = $variant ? $variant->getWeight() : $product->getWeight();
+        
         // Vérifie si l’item existe déjà dans le panier
         $existing = null;
         foreach ($cart->getItems() as $item) {
@@ -134,12 +135,14 @@ class CartController extends AbstractController
                 ], 400);
             }
             $existing->setQuantity($newQty);
+            
         } else {
             $item = (new CartItem())
                 ->setProduct($product)
                 ->setVariant($variant)
                 ->setPrice($price)
                 ->setQuantity($requestedQty)
+                ->setWeight($unitWeight) 
                 ->setCart($cart);
 
             $cart->addItem($item);
@@ -174,7 +177,8 @@ class CartController extends AbstractController
             return $this->json([
                 'items' => [],
                 'total' => 0,
-                'cartToken' => null
+                'cartToken' => null,
+                'totalWeight' => 0.0, 
             ]);
         }
 
@@ -184,7 +188,8 @@ class CartController extends AbstractController
             return $this->json([
                 'items' => [],
                 'total' => 0,
-                'cartToken' => $token
+                'cartToken' => $token,
+                'totalWeight' => 0.0, 
             ]);
         }
 
@@ -193,6 +198,8 @@ class CartController extends AbstractController
         $items = array_map(function ($i) use ($formatImagePath) {
             $variantImage = $i->getVariant()?->getImage();
             $productImage = $i->getProduct()->getMainImage();
+            $unitWeight = $i->getWeight() ?? 0.0;
+            $totalWeight = $i->getTotalWeight(); 
 
             return [
                 'itemId' => $i->getId(),
@@ -202,6 +209,9 @@ class CartController extends AbstractController
                 'quantity' => $i->getQuantity(),
                 'price' => $i->getPrice(),
                 'total' => $i->getPrice() * $i->getQuantity(),
+                'weight' => $unitWeight,
+                'totalWeight' => $totalWeight,
+                
                 'image' => $formatImagePath($variantImage ?? $productImage)
             ];
         }, $cart->getItems()->toArray());
@@ -209,10 +219,10 @@ class CartController extends AbstractController
         return $this->json([
             'items' => $items,
             'total' => $cart->getTotalPrice(),
-            'cartToken' => $cart->getToken()
+            'cartToken' => $cart->getToken(),
+            'totalWeight' => $cart->getTotalWeight(), 
         ]);
     }
-
 
 
     /**
@@ -252,11 +262,14 @@ class CartController extends AbstractController
         $item->setQuantity($requestedQty);
         $this->em->flush();
 
+        $cart = $item->getCart();
+        
         return $this->json([
             'success' => true,
             'itemId' => $item->getId(),
             'quantity' => $item->getQuantity(),
-            'availableStock' => $availableStock
+            'availableStock' => $availableStock,
+            'totalWeight' => $cart->getTotalWeight() 
         ]);
     }
 
@@ -297,7 +310,13 @@ class CartController extends AbstractController
 
         $this->em->remove($item);
         $this->em->flush();
+        
+        $cart = $item->getCart();
 
-        return $this->json(['success' => true, 'message' => 'Item supprimé']);
+        return $this->json([
+            'success' => true, 
+            'message' => 'Item supprimé',
+            'totalWeight' => $cart->getTotalWeight() 
+        ]);
     }
 }

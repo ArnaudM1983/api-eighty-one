@@ -26,6 +26,9 @@ class Order
     #[ORM\Column(type: 'decimal', precision: 10, scale: 2)]
     private ?string $total = null;
 
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $totalWeight = null;
+
     #[ORM\Column(length: 50)]
     private ?string $status = 'created';
 
@@ -194,5 +197,16 @@ class Order
     public function isFullyPaid(): bool
     {
         return $this->getRemainingAmount() <= 0;
+    }
+
+    public function getTotalWeight(): ?float
+    {
+        return $this->totalWeight;
+    }
+    
+    public function setTotalWeight(?float $totalWeight): self
+    {
+        $this->totalWeight = $totalWeight;
+        return $this;
     }
 }
