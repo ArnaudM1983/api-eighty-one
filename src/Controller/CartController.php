@@ -167,12 +167,24 @@ class CartController extends AbstractController
     #[Route('', name: 'cart_get', methods: ['GET'])]
     public function get(Request $request): JsonResponse
     {
-        $cart = $this->getCartFromCookie($request);
+        // Récupère le token depuis query param ou cookie
+        $token = $request->query->get('cartToken') ?? $request->cookies->get('cart_token');
+
+        if (!$token) {
+            return $this->json([
+                'items' => [],
+                'total' => 0,
+                'cartToken' => null
+            ]);
+        }
+
+        $cart = $this->cartRepo->findOneByToken($token);
 
         if (!$cart) {
             return $this->json([
                 'items' => [],
-                'total' => 0
+                'total' => 0,
+                'cartToken' => $token
             ]);
         }
 
@@ -196,9 +208,11 @@ class CartController extends AbstractController
 
         return $this->json([
             'items' => $items,
-            'total' => $cart->getTotalPrice()
+            'total' => $cart->getTotalPrice(),
+            'cartToken' => $cart->getToken()
         ]);
     }
+
 
 
     /**
