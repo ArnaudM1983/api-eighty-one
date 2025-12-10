@@ -59,6 +59,12 @@ class ShippingInfo
     )]
     private ?string $phone = null;
 
+    #[ORM\Column(length: 20, nullable: true)]
+    private ?string $pudoId = null; 
+
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $pudoName = null;
+
     // --- Getters / Setters ---
     public function getId(): ?int { return $this->id; }
 
@@ -78,7 +84,7 @@ class ShippingInfo
     public function setCity(string $city): self { $this->city = $city; return $this; }
 
     public function getPostalCode(): ?string { return $this->postalCode; }
-    // Note: Le type hint ici ne doit pas inclure ? si vous avez Assert\NotBlank
+    
     public function setPostalCode(string $postalCode): self { $this->postalCode = $postalCode; return $this; }
 
     public function getCountry(): ?string { return $this->country; }
@@ -86,4 +92,26 @@ class ShippingInfo
 
     public function getPhone(): ?string { return $this->phone; }
     public function setPhone(?string $phone): self { $this->phone = $phone; return $this; }
+
+    public function getPudoId(): ?string
+    {
+        return $this->pudoId;
+    }
+    
+    public function setPudoId(?string $pudoId): self
+    {
+        $this->pudoId = $pudoId;
+        return $this;
+    }
+
+    public function getPudoName(): ?string
+    {
+        return $this->pudoName;
+    }
+
+    public function setPudoName(?string $pudoName): self
+    {
+        $this->pudoName = $pudoName;
+        return $this;
+    }
 }

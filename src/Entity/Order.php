@@ -29,6 +29,12 @@ class Order
     #[ORM\Column(type: 'float', nullable: true)]
     private ?float $totalWeight = null;
 
+    #[ORM\Column(length: 100, nullable: true)]
+    private ?string $shippingMethod = null;
+
+    #[ORM\Column(type: 'decimal', precision: 10, scale: 2, nullable: true)]
+    private ?string $shippingCost = null;
+
     #[ORM\Column(length: 50)]
     private ?string $status = 'created';
 
@@ -80,17 +86,33 @@ class Order
         return $this;
     }
 
-    public function getTotal(): float
+    // Calcul du sous-total (total des articles)
+    public function getSubTotal(): float
     {
         return (float) array_sum(array_map(fn($item) => $item->getTotalPrice(), $this->items->toArray()));
     }
 
-    public function setTotal(float $total): self
+    // Calcul du prix final (articles + port)
+    public function getTotalPrice(): float
     {
-        $this->total = $total;
-        return $this;
+        $itemsTotal = $this->getSubTotal();
+        $shipping = (float) $this->getShippingCost();
+
+        // Retourne le sous-total + les frais de port (en s'assurant que shippingCost n'est pas null)
+        return $itemsTotal + ($shipping ?? 0.0);
     }
 
+    public function getTotal(): ?string
+    {
+        return $this->total;
+    }
+
+    // Stock la valeur totale finale
+    public function setTotal(float $total): self
+    {
+        $this->total = number_format($total, 2, '.', '');
+        return $this;
+    }
 
     public function getTotalQuantity(): int
     {
@@ -203,10 +225,32 @@ class Order
     {
         return $this->totalWeight;
     }
-    
+
     public function setTotalWeight(?float $totalWeight): self
     {
         $this->totalWeight = $totalWeight;
+        return $this;
+    }
+
+    public function getShippingMethod(): ?string
+    {
+        return $this->shippingMethod;
+    }
+
+    public function setShippingMethod(?string $shippingMethod): self
+    {
+        $this->shippingMethod = $shippingMethod;
+        return $this;
+    }
+
+    public function getShippingCost(): ?string
+    {
+        return $this->shippingCost;
+    }
+
+    public function setShippingCost(?string $shippingCost): self
+    {
+        $this->shippingCost = $shippingCost;
         return $this;
     }
 }
