@@ -165,18 +165,38 @@ XML;
     {
         $formatted = [];
         foreach ($pointsRelais as $pudo) {
-            $formatted[] = [
-                'id' => (string) ($pudo->Num ?? ''),
-                'latitude' => (float) ($pudo->Latitude ?? 0.0),
-                'longitude' => (float) ($pudo->Longitude ?? 0.0),
-                'distance' => (int) ($pudo->Distance ?? 0),
+            
+            // Extraction du Numéro (id)
+            $pudoNum = (string) ($pudo->Num ?? '');
 
-                'name' => trim((string) ($pudo->Lgdr1 ?? '')),
-                'address' => trim(
-                    (string) ($pudo->LgAdr3 ?? '') .
-                        ' ' .
-                        (string) ($pudo->LgAdr4 ?? '')
-                ),
+            // --- Extraction des Coordonnées (Correction pour éviter la troncature 45/4) ---
+            
+            // 1. Convertir explicitement le tag XML en chaîne et la nettoyer.
+            $latitudeStr = trim((string) ($pudo->Latitude ?? ''));
+            $longitudeStr = trim((string) ($pudo->Longitude ?? ''));
+
+            // 2. Tenter la conversion en float, en utilisant 'null' si la chaîne est vide
+            //    (Si la chaîne est "45.76", (float) la convertit correctement. Si elle est mal lue, on aura null.)
+            $latitude = !empty($latitudeStr) ? (float) $latitudeStr : null;
+            $longitude = !empty($longitudeStr) ? (float) $longitudeStr : null;
+
+            // --- Extraction du Nom et de l'Adresse (Robuste) ---
+            $commerceName = trim((string) ($pudo->Lgdr1 ?? ''));
+            if (empty($commerceName)) {
+                 $commerceName = trim((string) ($pudo->Lgdr2 ?? ''));
+            }
+            $streetAddress = trim((string) ($pudo->LgAdr3 ?? ''));
+            if (empty($streetAddress)) {
+                $streetAddress = trim((string) ($pudo->LgAdr2 ?? ''));
+            }
+
+            $formatted[] = [
+                'id' => $pudoNum,
+                'latitude' => $latitude, 
+                'longitude' => $longitude,
+                'distance' => (int) ($pudo->Distance ?? 0),
+                'name' => $commerceName,
+                'address' => $streetAddress, 
                 'postalCode' => (string) ($pudo->CP ?? ''),
                 'city' => (string) ($pudo->Ville ?? ''),
                 'country' => (string) ($pudo->Pays ?? ''),
