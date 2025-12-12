@@ -7,6 +7,18 @@ use Psr\Log\LoggerInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 
+/**
+ * SERVICE : MondialRelayService (Backend - Symfony)
+ * * RÔLE :
+ * 1. Interface unique pour communiquer avec l'API SOAP de Mondial Relay (WSI4).
+ * 2. Gérer l'authentification et le calcul des hashs MD5 requis.
+ * 3. Construire et envoyer les requêtes SOAP (e.g., recherche de Points Relais).
+ * 4. Parser la réponse XML reçue et la convertir en un tableau PHP standard.
+ * 5. La méthode 'formatPudosResponse' est spécifiquement responsable d'extraire les données
+ * du Point Relais (Nom: Lgdr1/Lgdr2, Adresse: LgAdr3/LgAdr2, Coordonnées) pour le front-end.
+ * 6. Gérer les erreurs de statut HTTP et les erreurs internes de code STAT.
+ */
+
 class MondialRelayService
 {
     // --- CONSTANTES D'AUTHENTIFICATION & D'ACTION ---
@@ -119,7 +131,6 @@ class MondialRelayService
         }
     }
 
-    // ... (buildSoapRequest et formatPudosResponse restent inchangés) ...
     private function buildSoapRequest(string $cp, string $pays, string $security, string $nbResultats): string
     {
         $enseigne = self::ENSEIGNE;
