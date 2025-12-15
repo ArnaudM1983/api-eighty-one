@@ -19,7 +19,7 @@ class ApiTestController extends AbstractController
     public function testMondialRelay(MondialRelayService $mrService, LoggerInterface $logger): Response
     {
         // --- Paramètres de Test ---
-        $postalCode = '69003'; // Lyon 3e, un bon code postal de test
+        $postalCode = '69003'; // Lyon 3e
         $countryCode = 'FR';
         $weightInKg = 1.0;
         // --------------------------

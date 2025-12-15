@@ -41,7 +41,7 @@ class MondialRelayService
     {
         // Paramètres pour le hash MD5
         $numPointRelais = ''; $ville = ''; $latitude = ''; $longitude = ''; $taille = '';
-        $poidsHashValue = ''; // Position du poids
+        $poidsHashValue = (string) round($weightInKg * 1000); // 1.0 kg -> '1000'
         $typeActivite = ''; // Position du type d'activité
         
         $action = self::ACTION_CODE; $delaiEnvoi = '0'; $rayonRecherche = '50'; $nombreResultats = '30';
