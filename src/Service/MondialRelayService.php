@@ -14,24 +14,22 @@ use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
  * 2. Gérer l'authentification et le calcul des hashs MD5 requis.
  * 3. Construire et envoyer les requêtes SOAP (e.g., recherche de Points Relais).
  * 4. Parser la réponse XML reçue et la convertir en un tableau PHP standard.
- * 5. La méthode 'formatPudosResponse' est spécifiquement responsable d'extraire les données
- * du Point Relais (Nom: Lgdr1/Lgdr2, Adresse: LgAdr3/LgAdr2, Coordonnées) pour le front-end.
- * 6. Gérer les erreurs de statut HTTP et les erreurs internes de code STAT.
+ * 5. Gérer les erreurs de statut HTTP et les erreurs internes de code STAT.
  */
 
 class MondialRelayService
 {
     // --- CONSTANTES D'AUTHENTIFICATION & D'ACTION ---
-    private const ENSEIGNE = 'CC22ZCS1'; 
-    private const CLE_PRIVEE = 'iva9oG9F';   
-    private const ACTION_CODE = '24R'; 
-    private const MR_NAMESPACE = 'http://www.mondialrelay.fr/webservice/'; 
+    private const ENSEIGNE = 'CC22ZCS1';
+    private const CLE_PRIVEE = 'iva9oG9F';
+    private const ACTION_CODE = '24R';
+    private const MR_NAMESPACE = 'http://www.mondialrelay.fr/webservice/';
 
     public function __construct(
         private HttpClientInterface $httpClient,
         private ParameterBagInterface $parameterBag,
-        private LoggerInterface $logger 
-    ) { }
+        private LoggerInterface $logger
+    ) {}
 
     // ----------------------------------------------------------------------------------
     // 1. RECHERCHE DES POINTS RELAIS
@@ -40,28 +38,40 @@ class MondialRelayService
     public function searchPointsRelais(string $postalCode, string $countryCode, float $weightInKg): array
     {
         // Paramètres pour le hash MD5
-        $numPointRelais = ''; $ville = ''; $latitude = ''; $longitude = ''; $taille = '';
+        $numPointRelais = '';
+        $ville = '';
+        $latitude = '';
+        $longitude = '';
+        $taille = '';
         $poidsHashValue = (string) round($weightInKg * 1000); // 1.0 kg -> '1000'
-        $typeActivite = ''; // Position du type d'activité
-        
-        $action = self::ACTION_CODE; $delaiEnvoi = '0'; $rayonRecherche = '50'; $nombreResultats = '30';
+        $typeActivite = '';
+
+        $action = self::ACTION_CODE;
+        $delaiEnvoi = '0';
+        $rayonRecherche = '50';
+        $nombreResultats = '30';
+
+        // --- SÉCURISATION DES CONSTANTES ---
+        $enseigne = trim(self::ENSEIGNE);
+        $clePrivee = trim(self::CLE_PRIVEE);
+        // ------------------------------------
 
         // 1. Construction de la Chaîne pour le Hash MD5 (ORDRE CRITIQUE MR WSI4)
-        $concatString = self::ENSEIGNE
+        $concatString = $enseigne
             . $countryCode . $numPointRelais . $ville . $postalCode . $latitude . $longitude . $taille
-            . $poidsHashValue 
+            . $poidsHashValue
             . $action . $delaiEnvoi . $rayonRecherche . $typeActivite . $nombreResultats
-            . self::CLE_PRIVEE;
+            . $clePrivee;
 
-        $this->logger->info("MR MD5 String (COMPLETE): " . $concatString); 
+        $this->logger->info("MR MD5 String (COMPLETE): " . $concatString);
 
         // 2. Calcul du Hash MD5 en MAJUSCULES
         $securityHash = strtoupper(md5($concatString));
 
         // 3. Construction du corps SOAP
         $xmlBody = $this->buildSoapRequest(
-            $postalCode, 
-            $countryCode, 
+            $postalCode,
+            $countryCode,
             $securityHash,
             $nombreResultats
         );
@@ -79,12 +89,18 @@ class MondialRelayService
             $content = $response->getContent();
             $statusCode = $response->getStatusCode();
 
+            // --- DEBOGAGE : Sauvegarde du XML brut pour inspection (À RETIRER APRÈS DEBOGAGE) ---
+            $logPathDebug = $this->parameterBag->get('kernel.logs_dir') . '/mr_debug_' . time() . '.xml';
+            file_put_contents($logPathDebug, $content);
+            $this->logger->info("Réponse XML Mondial Relay enregistrée pour inspection : " . $logPathDebug);
+            // ------------------------------------------------------------------------------------
+
             if ($statusCode !== 200) {
-                 $logPath = $this->parameterBag->get('kernel.logs_dir') . '/mr_error_' . time() . '.xml';
-                 file_put_contents($logPath, $content);
-                 $errorMessage = "Erreur HTTP {$statusCode} lors de l'appel Mondial Relay (Réponse enregistrée).";
-                 $this->logger->error($errorMessage);
-                 throw new Exception($errorMessage);
+                $logPath = $this->parameterBag->get('kernel.logs_dir') . '/mr_error_' . time() . '.xml';
+                // file_put_contents($logPath, $content); // Déjà enregistré dans le bloc debug
+                $errorMessage = "Erreur HTTP {$statusCode} lors de l'appel Mondial Relay (Réponse enregistrée).";
+                $this->logger->error($errorMessage);
+                throw new Exception($errorMessage);
             }
 
             // 5. Interprétation de la réponse
@@ -95,15 +111,16 @@ class MondialRelayService
                 $this->logger->error("Erreur de parsing XML pour Mondial Relay. Contenu: " . $content);
                 throw new Exception("Erreur de parsing XML après connexion réussie.");
             }
-            
+
             $namespaces = $xmlResponse->getNamespaces(true);
-            
+
+            // Si le namespace 'soap' est 'env' ou autre, ajuster ici
             $soapBody = $xmlResponse->children($namespaces['soap'])->Body;
-            
+
             // La réponse WSI4 utilise le namespace MR_NAMESPACE
             $mrResponse = $soapBody->children(self::MR_NAMESPACE)->WSI4_PointRelais_RechercheResponse;
             $result = $mrResponse->WSI4_PointRelais_RechercheResult ?? null;
-            
+
             // Vérification de Fault (nécessaire si le hash est 97)
             if (!$result) {
                 $fault = $xmlResponse->xpath('//faultstring');
@@ -117,7 +134,7 @@ class MondialRelayService
 
             if ($statCode !== '0') {
                 $errorMessage = "Erreur Mondial Relay (Code {$statCode}). Code postal: {$postalCode}.";
-                $this->logger->error("Mondial Relay STAT code error: " . $statCode); 
+                $this->logger->error("Mondial Relay STAT code error: " . $statCode);
                 throw new Exception($errorMessage);
             }
 
@@ -163,37 +180,50 @@ XML;
     {
         $formatted = [];
         foreach ($pointsRelais as $pudo) {
-            
+
             // Extraction du Numéro (id)
             $pudoNum = (string) ($pudo->Num ?? '');
 
-            // --- Extraction des Coordonnées ---
-            
-            // 1. Convertir explicitement le tag XML en chaîne et la nettoyer.
+            // --- CORRECTION 1 : Extraction des Coordonnées (Gestion de la virgule) ---
+
             $latitudeStr = trim((string) ($pudo->Latitude ?? ''));
             $longitudeStr = trim((string) ($pudo->Longitude ?? ''));
 
-            // 2. Tenter la conversion en float, en utilisant 'null' si la chaîne est vide
+            // Remplacer la virgule par un point pour garantir le casting en float
+            $latitudeStr = str_replace(',', '.', $latitudeStr);
+            $longitudeStr = str_replace(',', '.', $longitudeStr);
+
             $latitude = !empty($latitudeStr) ? (float) $latitudeStr : null;
             $longitude = !empty($longitudeStr) ? (float) $longitudeStr : null;
 
-            // --- Extraction du Nom et de l'Adresse ---
-            $commerceName = trim((string) ($pudo->Lgdr1 ?? ''));
+            // --- CORRECTION 2 : Extraction du Nom et de l'Adresse (Utiliser LgAdr1 pour le nom) ---
+
+            // LgAdr1 contient le nom du commerce (e.g., "LOCKER ECO LAVERIE...")
+            $commerceName = trim((string) ($pudo->LgAdr1 ?? ''));
+
+            // LgAdr2 semble être le complément de nom (laissez la vérification LgAdr2 en second)
+            // Note: Lgdr1/Lgdr2 (anciennes balises) ne sont pas utilisées.
             if (empty($commerceName)) {
-                 $commerceName = trim((string) ($pudo->Lgdr2 ?? ''));
+                $commerceName = trim((string) ($pudo->LgAdr2 ?? ''));
             }
+
+            // L'adresse de rue est dans LgAdr3 ou LgAdr2 (selon le format MR)
             $streetAddress = trim((string) ($pudo->LgAdr3 ?? ''));
             if (empty($streetAddress)) {
                 $streetAddress = trim((string) ($pudo->LgAdr2 ?? ''));
             }
+            // Si LgAdr3 et LgAdr2 sont vides, essayons LgAdr1 si ce n'est pas le nom du commerce
+            if (empty($streetAddress)) {
+                $streetAddress = trim((string) ($pudo->LgAdr1 ?? ''));
+            }
 
             $formatted[] = [
                 'id' => $pudoNum,
-                'latitude' => $latitude, 
+                'latitude' => $latitude,
                 'longitude' => $longitude,
                 'distance' => (int) ($pudo->Distance ?? 0),
                 'name' => $commerceName,
-                'address' => $streetAddress, 
+                'address' => $streetAddress,
                 'postalCode' => (string) ($pudo->CP ?? ''),
                 'city' => (string) ($pudo->Ville ?? ''),
                 'country' => (string) ($pudo->Pays ?? ''),
