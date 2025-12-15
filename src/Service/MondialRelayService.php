@@ -96,10 +96,8 @@ class MondialRelayService
                 throw new Exception("Erreur de parsing XML après connexion réussie.");
             }
             
-            // CORRECTION CLÉ : Accès aux éléments par namespace et children()
             $namespaces = $xmlResponse->getNamespaces(true);
             
-            // Le Body utilise l'alias 'soap'
             $soapBody = $xmlResponse->children($namespaces['soap'])->Body;
             
             // La réponse WSI4 utilise le namespace MR_NAMESPACE
@@ -169,18 +167,17 @@ XML;
             // Extraction du Numéro (id)
             $pudoNum = (string) ($pudo->Num ?? '');
 
-            // --- Extraction des Coordonnées (Correction pour éviter la troncature 45/4) ---
+            // --- Extraction des Coordonnées ---
             
             // 1. Convertir explicitement le tag XML en chaîne et la nettoyer.
             $latitudeStr = trim((string) ($pudo->Latitude ?? ''));
             $longitudeStr = trim((string) ($pudo->Longitude ?? ''));
 
             // 2. Tenter la conversion en float, en utilisant 'null' si la chaîne est vide
-            //    (Si la chaîne est "45.76", (float) la convertit correctement. Si elle est mal lue, on aura null.)
             $latitude = !empty($latitudeStr) ? (float) $latitudeStr : null;
             $longitude = !empty($longitudeStr) ? (float) $longitudeStr : null;
 
-            // --- Extraction du Nom et de l'Adresse (Robuste) ---
+            // --- Extraction du Nom et de l'Adresse ---
             $commerceName = trim((string) ($pudo->Lgdr1 ?? ''));
             if (empty($commerceName)) {
                  $commerceName = trim((string) ($pudo->Lgdr2 ?? ''));
