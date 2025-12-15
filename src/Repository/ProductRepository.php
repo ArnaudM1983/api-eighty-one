@@ -55,5 +55,4 @@ class ProductRepository extends ServiceEntityRepository
             ->getOneOrNullResult();
     }
 
-    // Tu peux ajouter d'autres méthodes personnalisées ici
 }

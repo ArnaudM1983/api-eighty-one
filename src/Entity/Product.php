@@ -36,8 +36,14 @@ class Product
     #[ORM\Column(nullable: true)]
     private ?int $stock = null;
 
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $weight = null;
+
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $mainImage = null;
+
+    #[ORM\Column(type: 'boolean')]
+    private bool $featured = false;
 
     #[ORM\Column(type: 'datetime')]
     private \DateTimeInterface $createdAt;
@@ -155,6 +161,18 @@ class Product
         return $this;
     }
 
+    // Weight
+    public function getWeight(): ?float
+    {
+        return $this->weight;
+    }
+
+    public function setWeight(?float $weight): self
+    {
+        $this->weight = $weight;
+        return $this;
+    }
+
     // Main Image
     public function getMainImage(): ?string
     {
@@ -188,6 +206,18 @@ class Product
     public function setUpdatedAt(\DateTimeInterface $updatedAt): self
     {
         $this->updatedAt = $updatedAt;
+        return $this;
+    }
+
+    // Best Sellers  – Boolean true/false - This will be a toggle in the back office
+    public function isFeatured(): bool
+    {
+        return $this->featured;
+    }
+
+    public function setFeatured(bool $featured): self
+    {
+        $this->featured = $featured;
         return $this;
     }
 
