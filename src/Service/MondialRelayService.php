@@ -89,15 +89,9 @@ class MondialRelayService
             $content = $response->getContent();
             $statusCode = $response->getStatusCode();
 
-            // --- DEBOGAGE : Sauvegarde du XML brut pour inspection (À RETIRER APRÈS DEBOGAGE) ---
-            $logPathDebug = $this->parameterBag->get('kernel.logs_dir') . '/mr_debug_' . time() . '.xml';
-            file_put_contents($logPathDebug, $content);
-            $this->logger->info("Réponse XML Mondial Relay enregistrée pour inspection : " . $logPathDebug);
-            // ------------------------------------------------------------------------------------
 
             if ($statusCode !== 200) {
                 $logPath = $this->parameterBag->get('kernel.logs_dir') . '/mr_error_' . time() . '.xml';
-                // file_put_contents($logPath, $content); // Déjà enregistré dans le bloc debug
                 $errorMessage = "Erreur HTTP {$statusCode} lors de l'appel Mondial Relay (Réponse enregistrée).";
                 $this->logger->error($errorMessage);
                 throw new Exception($errorMessage);
@@ -114,14 +108,13 @@ class MondialRelayService
 
             $namespaces = $xmlResponse->getNamespaces(true);
 
-            // Si le namespace 'soap' est 'env' ou autre, ajuster ici
             $soapBody = $xmlResponse->children($namespaces['soap'])->Body;
 
             // La réponse WSI4 utilise le namespace MR_NAMESPACE
             $mrResponse = $soapBody->children(self::MR_NAMESPACE)->WSI4_PointRelais_RechercheResponse;
             $result = $mrResponse->WSI4_PointRelais_RechercheResult ?? null;
 
-            // Vérification de Fault (nécessaire si le hash est 97)
+            // Vérification de Fault
             if (!$result) {
                 $fault = $xmlResponse->xpath('//faultstring');
                 $errorMessage = (string) ($fault[0] ?? "Réponse MR inattendue ou structure invalide.");
@@ -176,15 +169,51 @@ class MondialRelayService
 XML;
     }
 
+    /**
+     * Formate les horaires XML d'une journée (4 strings) en un tableau lisible.
+     * @param \SimpleXMLElement|null $horairesXml L'objet SimpleXMLElement pour le jour (e.g., $pudo->Horaires_Lundi).
+     * @return array Un tableau avec les clés 'am_start', 'am_end', 'pm_start', 'pm_end'.
+     */
+    private function formatDayHours(\SimpleXMLElement $horairesXml = null): array
+    {
+        if (!$horairesXml || !$horairesXml->string) {
+            return [
+                'am_start' => '',
+                'am_end'   => '',
+                'pm_start' => '',
+                'pm_end'   => '',
+            ];
+        }
+
+        $strings = [];
+        foreach ($horairesXml->string as $str) {
+            // Le casting en string gère les cas de balise vide (<string />)
+            $strings[] = (string) $str;
+        }
+
+        // Assure que nous avons 4 éléments, remplis par des chaînes vides si manquants
+        $strings = array_pad($strings, 4, '');
+
+        // Format final : [Ouverture Matin, Fermeture Matin, Ouverture Soir, Fermeture Soir]
+        return [
+            'am_start' => $strings[0],
+            'am_end'   => $strings[1],
+            'pm_start' => $strings[2],
+            'pm_end'   => $strings[3],
+        ];
+    }
+
     private function formatPudosResponse(object $pointsRelais): array
     {
         $formatted = [];
+        $daysOfWeek = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
+
         foreach ($pointsRelais as $pudo) {
 
             // Extraction du Numéro (id)
             $pudoNum = (string) ($pudo->Num ?? '');
 
-            // --- CORRECTION 1 : Extraction des Coordonnées (Gestion de la virgule) ---
+            // --- Extraction des Coordonnées (Gestion de la virgule) ---
 
             $latitudeStr = trim((string) ($pudo->Latitude ?? ''));
             $longitudeStr = trim((string) ($pudo->Longitude ?? ''));
@@ -196,13 +225,11 @@ XML;
             $latitude = !empty($latitudeStr) ? (float) $latitudeStr : null;
             $longitude = !empty($longitudeStr) ? (float) $longitudeStr : null;
 
-            // --- CORRECTION 2 : Extraction du Nom et de l'Adresse (Utiliser LgAdr1 pour le nom) ---
+            // ---  Extraction du Nom et de l'Adresse (Utiliser LgAdr1 pour le nom) ---
 
             // LgAdr1 contient le nom du commerce (e.g., "LOCKER ECO LAVERIE...")
             $commerceName = trim((string) ($pudo->LgAdr1 ?? ''));
 
-            // LgAdr2 semble être le complément de nom (laissez la vérification LgAdr2 en second)
-            // Note: Lgdr1/Lgdr2 (anciennes balises) ne sont pas utilisées.
             if (empty($commerceName)) {
                 $commerceName = trim((string) ($pudo->LgAdr2 ?? ''));
             }
@@ -212,9 +239,15 @@ XML;
             if (empty($streetAddress)) {
                 $streetAddress = trim((string) ($pudo->LgAdr2 ?? ''));
             }
-            // Si LgAdr3 et LgAdr2 sont vides, essayons LgAdr1 si ce n'est pas le nom du commerce
             if (empty($streetAddress)) {
                 $streetAddress = trim((string) ($pudo->LgAdr1 ?? ''));
+            }
+
+            // --- Extraction des Horaires ---
+            $horaires = [];
+            foreach ($daysOfWeek as $day) {
+                $propName = 'Horaires_' . $day;
+                $horaires[$day] = $this->formatDayHours($pudo->$propName ?? null);
             }
 
             $formatted[] = [
@@ -227,6 +260,7 @@ XML;
                 'postalCode' => (string) ($pudo->CP ?? ''),
                 'city' => (string) ($pudo->Ville ?? ''),
                 'country' => (string) ($pudo->Pays ?? ''),
+                'hours' => $horaires, 
             ];
         }
         return $formatted;
