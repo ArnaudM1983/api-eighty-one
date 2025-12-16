@@ -61,24 +61,24 @@ class OrderController extends AbstractController
                 $orderItem->setProduct($cartItem->getProduct());
                 $orderItem->setVariant($cartItem->getVariant());
                 $orderItem->setQuantity($cartItem->getQuantity());
-                
+
                 // Assurez-vous que le prix et le poids ne sont pas nulls ici si la DB l'exige
-                $orderItem->setPrice($cartItem->getPrice() ?? '0.00'); 
-                $orderItem->setWeight($cartItem->getWeight() ?? 0.0); 
-                
+                $orderItem->setPrice($cartItem->getPrice() ?? '0.00');
+                $orderItem->setWeight($cartItem->getWeight() ?? 0.0);
+
                 $order->addItem($orderItem);
             }
 
             // Si la commande n'a finalement aucun article valide
             if ($order->getItems()->isEmpty()) {
-                 return $this->json(['error' => 'Le panier ne contient aucun article valide pour la commande.'], 400);
+                return $this->json(['error' => 'Le panier ne contient aucun article valide pour la commande.'], 400);
             }
 
             // Stock le poids total
             $order->setTotalWeight($cart->getTotalWeight() ?? 0.0);
 
             // Initialiser le champ $total avec le sous-total
-            $order->setTotal($order->getSubTotal()); 
+            $order->setTotal($order->getSubTotal());
 
             $em->persist($order);
             $em->flush();
@@ -92,7 +92,6 @@ class OrderController extends AbstractController
                 'total' => $order->getTotal(),
                 'totalWeight' => $order->getTotalWeight()
             ]);
-
         } catch (\Exception $e) {
             // --- CATCHER L'ERREUR DE PERSISTANCE ET RENVOYER LE DÉTAIL ---
             return $this->json([
@@ -100,7 +99,7 @@ class OrderController extends AbstractController
                 'details' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine()
-            ], 500); 
+            ], 500);
         }
     }
 
@@ -114,12 +113,12 @@ class OrderController extends AbstractController
     {
         // Contrôle de sécurité: Interdire la suppression si la commande est payée
         if ($order->getStatus() !== 'created' && $order->getStatus() !== 'cancelled') {
-             
-             return $this->json(['error' => 'Impossible de supprimer cette commande. Statut actuel: ' . $order->getStatus()], 403);
+
+            return $this->json(['error' => 'Impossible de supprimer cette commande. Statut actuel: ' . $order->getStatus()], 403);
         }
 
         try {
-            
+
             $this->em->remove($order);
             $this->em->flush();
 
@@ -127,7 +126,6 @@ class OrderController extends AbstractController
                 'success' => true,
                 'message' => "La commande #{$order->getId()} a été supprimée avec succès."
             ], 200);
-
         } catch (\Exception $e) {
             return $this->json([
                 'error' => 'Erreur inattendue lors de la suppression de la commande.',
@@ -180,16 +178,16 @@ class OrderController extends AbstractController
         return $this->json([
             'orderId' => $order->getId(),
             'cartToken' => $order->getCartToken(),
-            
+
             // --- AJOUT DE LA LISTE DES ARTICLES ---
-            'items' => $items, 
-            
+            'items' => $items,
+
             'total' => $order->getTotal(),
             'totalWeight' => $order->getTotalWeight(),
             'status' => $order->getStatus(),
             'createdAt' => $order->getCreatedAt()->format('Y-m-d H:i:s'),
             'updatedAt' => $order->getUpdatedAt()->format('Y-m-d H:i:s'),
-            
+
             'payments' => $payments,
         ]);
     }
@@ -205,8 +203,8 @@ class OrderController extends AbstractController
         $data = json_decode($request->getContent(), true);
 
         $weightInKg = $data['totalWeight'] ?? 0.0;
-        $modeCode = $data['modeCode'] ?? null; 
-        $countryCode = $data['countryCode'] ?? 'FR'; 
+        $modeCode = $data['modeCode'] ?? null;
+        $countryCode = $data['countryCode'] ?? 'FR';
 
         if (empty($modeCode) || $weightInKg <= 0) {
             return $this->json(['error' => 'Poids ou mode de livraison manquant.'], 400);
@@ -233,82 +231,48 @@ class OrderController extends AbstractController
     }
 
 
-    /**
-     * API: Update Shipping Info, Method, Cost, PUDO details, and Finalize Total.
-     * HTTP Method: POST
-     * URL: /api/order/{id}/shipping
-     */
     #[Route('/{id}/shipping', name: 'api_order_update_shipping', methods: ['POST'])]
     public function updateShippingInfo(Order $order, Request $request): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
 
-        // Mise à jour des frais et de la méthode dans l'entité Order
-        $shippingMethod = $data['shippingMethod'] ?? null;
-        $shippingCost = $data['shippingCost'] ?? '0.00';
-
-        if (empty($shippingMethod)) {
-            return $this->json(['error' => 'La méthode de livraison est manquante.'], 400);
-        }
-
-        $order->setShippingMethod($shippingMethod);
-        $order->setShippingCost($shippingCost);
-
-        // Recalculer et stocker le total final (SubTotal + ShippingCost)
+        // 1. Mise à jour de la commande
+        $order->setShippingMethod($data['shippingMethod'] ?? 'pickup');
+        $order->setShippingCost($data['shippingCost'] ?? 0);
         $order->setTotal($order->getTotalPrice());
 
-        // Mise à jour ou Création de ShippingInfo
-        try {
-            $shippingInfo = $order->getShippingInfo() ?: new ShippingInfo();
-            $shippingInfo->setOrder($order);
+        // 2. Gestion de ShippingInfo
+        $shippingInfo = $order->getShippingInfo() ?: new ShippingInfo();
+        $shippingInfo->setOrder($order);
 
-            // Mis à jour l'objet ShippingInfo avec toutes les données
-            $this->serializer->deserialize(
-                $request->getContent(),
-                ShippingInfo::class,
-                'json',
-                ['object_to_populate' => $shippingInfo]
-            );
+        // Mapping de l'adresse Client (Facturation)
+        $shippingInfo->setFirstName($data['firstName']);
+        $shippingInfo->setLastName($data['lastName']);
+        $shippingInfo->setAddress($data['address']);
+        $shippingInfo->setPostalCode($data['postalCode']);
+        $shippingInfo->setCity($data['city']);
+        $shippingInfo->setCountry($data['country']);
+        $shippingInfo->setPhone($data['phone'] ?? null);
 
-            $errors = $this->validator->validate($shippingInfo);
-
-            if (count($errors) > 0) {
-                $errorMessages = [];
-                foreach ($errors as $error) {
-                    $errorMessages[$error->getPropertyPath()] = $error->getMessage();
-                }
-                return $this->json([
-                    'error' => 'Erreur de validation des informations de livraison.',
-                    'details' => $errorMessages
-                ], 400);
-            }
-
-            $this->em->persist($shippingInfo);
-
-            // Création d'un paiement 'pending' avec le bon total
-            if ($order->getPayments()->isEmpty()) {
-                $payment = new Payment();
-                $payment->setOrder($order);
-                $payment->setAmount($order->getTotalPrice());
-                $payment->setStatus('pending');
-                $payment->setMethod('');
-                $this->em->persist($payment);
-            }
-
-            $this->em->flush();
-
-            return $this->json([
-                'success' => true,
-                'message' => 'Informations de livraison et frais enregistrés.',
-                'totalFinal' => $order->getTotal(),
-                'shippingInfoId' => $shippingInfo->getId()
-            ], 200);
-        } catch (\Exception $e) {
-            return $this->json([
-                'error' => 'Erreur inattendue lors de la mise à jour.',
-                'details' => $e->getMessage()
-            ], 400);
+        // Mapping de l'adresse Point Relais (Livraison)
+        if (isset($data['pudoId'])) {
+            $shippingInfo->setPudoId($data['pudoId']);
+            $shippingInfo->setPudoName($data['pudoName']);
+            $shippingInfo->setPudoAddress($data['pudoAddress']);
+            $shippingInfo->setPudoPostalCode($data['pudoPostalCode']);
+            $shippingInfo->setPudoCity($data['pudoCity']);
+            $shippingInfo->setPudoCountry($data['pudoCountry']);
+        } else {
+            // Nettoyage si on change de méthode
+            $shippingInfo->setPudoId(null);
+            $shippingInfo->setPudoName(null);
+            $shippingInfo->setPudoAddress(null);
         }
+
+        $this->em->persist($shippingInfo);
+        $this->em->flush();
+
+        return $this->json(['success' => true]);
     }
 
     /**
@@ -343,7 +307,6 @@ class OrderController extends AbstractController
                 'pudos' => $pudos,
                 'message' => count($pudos) . ' Points Relais trouvés.'
             ]);
-
         } catch (\Exception $e) {
             return $this->json([
                 'error' => 'Erreur lors de la recherche des Points Relais.',
