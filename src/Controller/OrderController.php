@@ -7,6 +7,7 @@ use App\Entity\ShippingInfo;
 use App\Entity\OrderItem;
 use App\Entity\Payment;
 use App\Entity\Cart;
+use App\Service\ColissimoService;
 use App\Service\TariffCalculatorService;
 use App\Service\MondialRelayService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -61,24 +62,24 @@ class OrderController extends AbstractController
                 $orderItem->setProduct($cartItem->getProduct());
                 $orderItem->setVariant($cartItem->getVariant());
                 $orderItem->setQuantity($cartItem->getQuantity());
-                
+
                 // Assurez-vous que le prix et le poids ne sont pas nulls ici si la DB l'exige
-                $orderItem->setPrice($cartItem->getPrice() ?? '0.00'); 
-                $orderItem->setWeight($cartItem->getWeight() ?? 0.0); 
-                
+                $orderItem->setPrice($cartItem->getPrice() ?? '0.00');
+                $orderItem->setWeight($cartItem->getWeight() ?? 0.0);
+
                 $order->addItem($orderItem);
             }
 
             // Si la commande n'a finalement aucun article valide
             if ($order->getItems()->isEmpty()) {
-                 return $this->json(['error' => 'Le panier ne contient aucun article valide pour la commande.'], 400);
+                return $this->json(['error' => 'Le panier ne contient aucun article valide pour la commande.'], 400);
             }
 
             // Stock le poids total
             $order->setTotalWeight($cart->getTotalWeight() ?? 0.0);
 
             // Initialiser le champ $total avec le sous-total
-            $order->setTotal($order->getSubTotal()); 
+            $order->setTotal($order->getSubTotal());
 
             $em->persist($order);
             $em->flush();
@@ -92,7 +93,6 @@ class OrderController extends AbstractController
                 'total' => $order->getTotal(),
                 'totalWeight' => $order->getTotalWeight()
             ]);
-
         } catch (\Exception $e) {
             // --- CATCHER L'ERREUR DE PERSISTANCE ET RENVOYER LE DÉTAIL ---
             return $this->json([
@@ -100,7 +100,7 @@ class OrderController extends AbstractController
                 'details' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine()
-            ], 500); 
+            ], 500);
         }
     }
 
@@ -114,12 +114,12 @@ class OrderController extends AbstractController
     {
         // Contrôle de sécurité: Interdire la suppression si la commande est payée
         if ($order->getStatus() !== 'created' && $order->getStatus() !== 'cancelled') {
-             
-             return $this->json(['error' => 'Impossible de supprimer cette commande. Statut actuel: ' . $order->getStatus()], 403);
+
+            return $this->json(['error' => 'Impossible de supprimer cette commande. Statut actuel: ' . $order->getStatus()], 403);
         }
 
         try {
-            
+
             $this->em->remove($order);
             $this->em->flush();
 
@@ -127,7 +127,6 @@ class OrderController extends AbstractController
                 'success' => true,
                 'message' => "La commande #{$order->getId()} a été supprimée avec succès."
             ], 200);
-
         } catch (\Exception $e) {
             return $this->json([
                 'error' => 'Erreur inattendue lors de la suppression de la commande.',
@@ -180,16 +179,16 @@ class OrderController extends AbstractController
         return $this->json([
             'orderId' => $order->getId(),
             'cartToken' => $order->getCartToken(),
-            
+
             // --- AJOUT DE LA LISTE DES ARTICLES ---
-            'items' => $items, 
-            
+            'items' => $items,
+
             'total' => $order->getTotal(),
             'totalWeight' => $order->getTotalWeight(),
             'status' => $order->getStatus(),
             'createdAt' => $order->getCreatedAt()->format('Y-m-d H:i:s'),
             'updatedAt' => $order->getUpdatedAt()->format('Y-m-d H:i:s'),
-            
+
             'payments' => $payments,
         ]);
     }
@@ -205,8 +204,8 @@ class OrderController extends AbstractController
         $data = json_decode($request->getContent(), true);
 
         $weightInKg = $data['totalWeight'] ?? 0.0;
-        $modeCode = $data['modeCode'] ?? null; 
-        $countryCode = $data['countryCode'] ?? 'FR'; 
+        $modeCode = $data['modeCode'] ?? null;
+        $countryCode = (!empty($data['countryCode'])) ? $data['countryCode'] : 'FR';
 
         if (empty($modeCode) || $weightInKg <= 0) {
             return $this->json(['error' => 'Poids ou mode de livraison manquant.'], 400);
@@ -343,10 +342,41 @@ class OrderController extends AbstractController
                 'pudos' => $pudos,
                 'message' => count($pudos) . ' Points Relais trouvés.'
             ]);
-
         } catch (\Exception $e) {
             return $this->json([
                 'error' => 'Erreur lors de la recherche des Points Relais.',
+                'details' => $e->getMessage()
+            ], 400);
+        }
+    }
+
+    /**
+     * API: Search Colissimo PUDOs
+     * HTTP Method: POST
+     * URL: /api/order/colissimo/pudo/search
+     */
+    #[Route('/colissimo/pudo/search', name: 'api_colissimo_search', methods: ['POST'])]
+    public function searchColissimo(Request $request, ColissimoService $colissimoService): JsonResponse
+    {
+        $data = json_decode($request->getContent(), true);
+
+        if (empty($data['postalCode'])) {
+            return $this->json(['error' => 'Le code postal est obligatoire'], 400);
+        }
+
+        try {
+            $pudos = $colissimoService->searchPointsRelais(
+                (string)$data['postalCode'],
+                (string)($data['city'] ?? ''),
+                (string)($data['address'] ?? ''),
+                (string)($data['countryCode'] ?? 'FR'),
+                (float)($data['totalWeight'] ?? 0.5)
+            );
+            
+            return $this->json(['success' => true, 'pudos' => $pudos]);
+        } catch (\Exception $e) {
+            return $this->json([
+                'error' => 'Erreur Colissimo',
                 'details' => $e->getMessage()
             ], 400);
         }

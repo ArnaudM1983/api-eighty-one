@@ -62,4 +62,49 @@ class ApiTestController extends AbstractController
             Response::HTTP_OK
         );
     }
+
+    /**
+     * Endpoint de test pour appeler le service Colissimo et diagnostiquer l'erreur 500.
+     * URL: /api/test/colissimo
+     */
+    #[Route('/api/test/colissimo', name: 'api_test_colissimo', methods: ['GET'])]
+    public function testColissimo(\App\Service\ColissimoService $colissimoService): JsonResponse
+    {
+        // --- Paramètres de Test Réels (Utilisez des vrais pour éviter les rejets) ---
+        $zipCode = '75001'; // Paris 1er
+        $city = 'Paris';
+        $address = '1 rue de Rivoli';
+        $weightInKg = 1.2;
+        // --------------------------------------------------------------------------
+
+        try {
+            $pointsColissimo = $colissimoService->searchPointsRelais(
+                $zipCode, 
+                $city, 
+                $address, 
+                'FR', 
+                $weightInKg
+            );
+
+            return new JsonResponse([
+                'status' => 'success',
+                'message' => 'Connexion Colissimo réussie.',
+                'params_test' => [
+                    'zip' => $zipCode,
+                    'address' => $address,
+                    'weight_grams' => $weightInKg * 1000
+                ],
+                'count' => count($pointsColissimo),
+                'results' => $pointsColissimo
+            ]);
+
+        } catch (\Exception $e) {
+            // C'est ici qu'on va voir le message d'erreur de La Poste (ex: API KEY invalide)
+            return new JsonResponse([
+                'status' => 'error',
+                'error_message' => $e->getMessage(),
+                'advice' => 'Si vous voyez une Erreur 500 ici, vérifiez votre COLISSIMO_API_KEY dans le .env.local.'
+            ], 500);
+        }
+    }
 }
