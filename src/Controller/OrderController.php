@@ -7,7 +7,6 @@ use App\Entity\ShippingInfo;
 use App\Entity\OrderItem;
 use App\Entity\Payment;
 use App\Entity\Cart;
-use App\Service\ColissimoService;
 use App\Service\TariffCalculatorService;
 use App\Service\MondialRelayService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -27,8 +26,7 @@ class OrderController extends AbstractController
         private SerializerInterface $serializer,
         private ValidatorInterface $validator,
         private TariffCalculatorService $tariffCalculatorService,
-        private MondialRelayService $mondialRelayService,
-        private ColissimoService $colissimoService
+        private MondialRelayService $mondialRelayService
     ) {}
 
     /**
@@ -206,7 +204,7 @@ class OrderController extends AbstractController
 
         $weightInKg = $data['totalWeight'] ?? 0.0;
         $modeCode = $data['modeCode'] ?? null;
-        $countryCode = (!empty($data['countryCode'])) ? $data['countryCode'] : 'FR';
+        $countryCode = $data['countryCode'] ?? 'FR';
 
         if (empty($modeCode) || $weightInKg <= 0) {
             return $this->json(['error' => 'Poids ou mode de livraison manquant.'], 400);
@@ -233,82 +231,48 @@ class OrderController extends AbstractController
     }
 
 
-    /**
-     * API: Update Shipping Info, Method, Cost, PUDO details, and Finalize Total.
-     * HTTP Method: POST
-     * URL: /api/order/{id}/shipping
-     */
     #[Route('/{id}/shipping', name: 'api_order_update_shipping', methods: ['POST'])]
     public function updateShippingInfo(Order $order, Request $request): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
 
-        // Mise à jour des frais et de la méthode dans l'entité Order
-        $shippingMethod = $data['shippingMethod'] ?? null;
-        $shippingCost = $data['shippingCost'] ?? '0.00';
-
-        if (empty($shippingMethod)) {
-            return $this->json(['error' => 'La méthode de livraison est manquante.'], 400);
-        }
-
-        $order->setShippingMethod($shippingMethod);
-        $order->setShippingCost($shippingCost);
-
-        // Recalculer et stocker le total final (SubTotal + ShippingCost)
+        // 1. Mise à jour de la commande
+        $order->setShippingMethod($data['shippingMethod'] ?? 'pickup');
+        $order->setShippingCost($data['shippingCost'] ?? 0);
         $order->setTotal($order->getTotalPrice());
 
-        // Mise à jour ou Création de ShippingInfo
-        try {
-            $shippingInfo = $order->getShippingInfo() ?: new ShippingInfo();
-            $shippingInfo->setOrder($order);
+        // 2. Gestion de ShippingInfo
+        $shippingInfo = $order->getShippingInfo() ?: new ShippingInfo();
+        $shippingInfo->setOrder($order);
 
-            // Mis à jour l'objet ShippingInfo avec toutes les données
-            $this->serializer->deserialize(
-                $request->getContent(),
-                ShippingInfo::class,
-                'json',
-                ['object_to_populate' => $shippingInfo]
-            );
+        // Mapping de l'adresse Client (Facturation)
+        $shippingInfo->setFirstName($data['firstName']);
+        $shippingInfo->setLastName($data['lastName']);
+        $shippingInfo->setAddress($data['address']);
+        $shippingInfo->setPostalCode($data['postalCode']);
+        $shippingInfo->setCity($data['city']);
+        $shippingInfo->setCountry($data['country']);
+        $shippingInfo->setPhone($data['phone'] ?? null);
 
-            $errors = $this->validator->validate($shippingInfo);
-
-            if (count($errors) > 0) {
-                $errorMessages = [];
-                foreach ($errors as $error) {
-                    $errorMessages[$error->getPropertyPath()] = $error->getMessage();
-                }
-                return $this->json([
-                    'error' => 'Erreur de validation des informations de livraison.',
-                    'details' => $errorMessages
-                ], 400);
-            }
-
-            $this->em->persist($shippingInfo);
-
-            // Création d'un paiement 'pending' avec le bon total
-            if ($order->getPayments()->isEmpty()) {
-                $payment = new Payment();
-                $payment->setOrder($order);
-                $payment->setAmount($order->getTotalPrice());
-                $payment->setStatus('pending');
-                $payment->setMethod('');
-                $this->em->persist($payment);
-            }
-
-            $this->em->flush();
-
-            return $this->json([
-                'success' => true,
-                'message' => 'Informations de livraison et frais enregistrés.',
-                'totalFinal' => $order->getTotal(),
-                'shippingInfoId' => $shippingInfo->getId()
-            ], 200);
-        } catch (\Exception $e) {
-            return $this->json([
-                'error' => 'Erreur inattendue lors de la mise à jour.',
-                'details' => $e->getMessage()
-            ], 400);
+        // Mapping de l'adresse Point Relais (Livraison)
+        if (isset($data['pudoId'])) {
+            $shippingInfo->setPudoId($data['pudoId']);
+            $shippingInfo->setPudoName($data['pudoName']);
+            $shippingInfo->setPudoAddress($data['pudoAddress']);
+            $shippingInfo->setPudoPostalCode($data['pudoPostalCode']);
+            $shippingInfo->setPudoCity($data['pudoCity']);
+            $shippingInfo->setPudoCountry($data['pudoCountry']);
+        } else {
+            // Nettoyage si on change de méthode
+            $shippingInfo->setPudoId(null);
+            $shippingInfo->setPudoName(null);
+            $shippingInfo->setPudoAddress(null);
         }
+
+        $this->em->persist($shippingInfo);
+        $this->em->flush();
+
+        return $this->json(['success' => true]);
     }
 
     /**
@@ -348,53 +312,6 @@ class OrderController extends AbstractController
                 'error' => 'Erreur lors de la recherche des Points Relais.',
                 'details' => $e->getMessage()
             ], 400);
-        }
-    }
-
-    /**
-     * API: Search Colissimo PUDOs
-     * HTTP Method: POST
-     * URL: /api/order/colissimo/pudo/search
-     */
-    #[Route('/colissimo/pudo/search', name: 'api_colissimo_search', methods: ['POST'])]
-    public function searchColissimo(Request $request, ColissimoService $colissimoService): JsonResponse
-    {
-        $data = json_decode($request->getContent(), true);
-
-        if (empty($data['postalCode'])) {
-            return $this->json(['error' => 'Le code postal est obligatoire'], 400);
-        }
-
-        try {
-            $pudos = $colissimoService->searchPointsRelais(
-                (string)$data['postalCode'],
-                (string)($data['city'] ?? ''),
-                (string)($data['address'] ?? ''),
-                (string)($data['countryCode'] ?? 'FR'),
-                (float)($data['totalWeight'] ?? 0.5)
-            );
-
-            return $this->json(['success' => true, 'pudos' => $pudos]);
-        } catch (\Exception $e) {
-            return $this->json([
-                'error' => 'Erreur Colissimo',
-                'details' => $e->getMessage()
-            ], 400);
-        }
-    }
-
-    /**
-     * API: Get Colissimo Widget Token
-     * URL: /api/order/colissimo/widget-token
-     */
-    #[Route('/colissimo/widget-token', name: 'api_colissimo_widget_token', methods: ['GET'])]
-    public function getColissimoToken(): JsonResponse
-    {
-        try {
-            $token = $this->colissimoService->generateWidgetToken();
-            return $this->json(['token' => $token]);
-        } catch (\Exception $e) {
-            return $this->json(['error' => $e->getMessage()], 500);
         }
     }
 }
