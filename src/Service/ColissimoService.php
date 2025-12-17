@@ -85,6 +85,40 @@ class ColissimoService
         ];
     }
 
+    public function generateWidgetToken(): string
+    {
+        try {
+            $response = $this->client->request('POST', 'https://ws.colissimo.fr/widget-colissimo/rest/authenticate.rest', [
+                'json' => [
+                    'apikey' => $this->colissimoApiKey,
+                    // 'partnerClientCode' => '367916' 
+                ],
+                'headers' => [
+                    'Accept' => 'application/json',
+                ],
+            ]);
+
+            // Utiliser false pour éviter que toArray() ne lance une exception HTTP 
+            // avant qu'on puisse analyser le contenu
+            $statusCode = $response->getStatusCode();
+            $data = $response->toArray(false); 
+
+            if ($statusCode !== 200) {
+                $errorMsg = $data['errorMessage'] ?? 'Erreur inconnue (Status '.$statusCode.')';
+                throw new \Exception("Colissimo Auth Error: " . $errorMsg);
+            }
+
+            if (!isset($data['token'])) {
+                throw new \Exception("Token non présent dans la réponse.");
+            }
+
+            return $data['token'];
+        } catch (\Exception $e) {
+            // On log l'erreur pour le debug Symfony
+            throw new \Exception($e->getMessage());
+        }
+    }
+
     /**
      * Teste la validité de la clé API via l'endpoint d'authentification du Widget.
      * C'est le test le plus simple et le plus fiable.
