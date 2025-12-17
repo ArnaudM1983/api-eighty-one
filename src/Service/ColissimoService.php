@@ -21,6 +21,7 @@ class ColissimoService
         $response = $this->client->request('POST', 'https://ws.colissimo.fr/pointretrait-ws-cxf/rest/v2/pointretrait/findRDVPointRetraitAcheminement', [
             'json' => [
                 'apikey'       => $this->colissimoApiKey,
+                'codTiersPourPartenaire' => '367916',
                 'address'      => !empty($address) ? mb_substr($address, 0, 100) : ' ',
                 'zipCode'      => $zipCode,
                 'city'         => !empty($city) ? mb_substr($city, 0, 50) : ' ',
@@ -82,5 +83,44 @@ class ColissimoService
             'pm_start' => str_replace(':', '', $pm[0] ?? ''),
             'pm_end'   => str_replace(':', '', $pm[1] ?? ''),
         ];
+    }
+
+    /**
+     * Teste la validité de la clé API via l'endpoint d'authentification du Widget.
+     * C'est le test le plus simple et le plus fiable.
+     */
+    public function checkApiKeyValidity(): array
+    {
+        try {
+            $response = $this->client->request('POST', 'https://ws.colissimo.fr/widget-colissimo/rest/authenticate.rest', [
+                'json' => [
+                    'apikey' => $this->colissimoApiKey
+                ]
+            ]);
+
+            $statusCode = $response->getStatusCode();
+            $content = $response->getContent(false);
+            $data = json_decode($content, true);
+
+            if ($statusCode === 200 && isset($data['token'])) {
+                return [
+                    'status' => 'success',
+                    'message' => 'La clé API est VALIDE. Le serveur a généré un token.',
+                    'token_preview' => substr($data['token'], 0, 20) . '...'
+                ];
+            }
+
+            return [
+                'status' => 'error',
+                'code' => $statusCode,
+                'message' => 'La clé API est REJETÉE par Colissimo.',
+                'raw_response' => $content
+            ];
+        } catch (\Exception $e) {
+            return [
+                'status' => 'error',
+                'message' => 'Erreur de connexion : ' . $e->getMessage()
+            ];
+        }
     }
 }
