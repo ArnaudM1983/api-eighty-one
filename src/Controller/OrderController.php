@@ -27,7 +27,8 @@ class OrderController extends AbstractController
         private SerializerInterface $serializer,
         private ValidatorInterface $validator,
         private TariffCalculatorService $tariffCalculatorService,
-        private MondialRelayService $mondialRelayService
+        private MondialRelayService $mondialRelayService,
+        private ColissimoService $colissimoService
     ) {}
 
     /**
@@ -372,13 +373,28 @@ class OrderController extends AbstractController
                 (string)($data['countryCode'] ?? 'FR'),
                 (float)($data['totalWeight'] ?? 0.5)
             );
-            
+
             return $this->json(['success' => true, 'pudos' => $pudos]);
         } catch (\Exception $e) {
             return $this->json([
                 'error' => 'Erreur Colissimo',
                 'details' => $e->getMessage()
             ], 400);
+        }
+    }
+
+    /**
+     * API: Get Colissimo Widget Token
+     * URL: /api/order/colissimo/widget-token
+     */
+    #[Route('/colissimo/widget-token', name: 'api_colissimo_widget_token', methods: ['GET'])]
+    public function getColissimoToken(): JsonResponse
+    {
+        try {
+            $token = $this->colissimoService->generateWidgetToken();
+            return $this->json(['token' => $token]);
+        } catch (\Exception $e) {
+            return $this->json(['error' => $e->getMessage()], 500);
         }
     }
 }
