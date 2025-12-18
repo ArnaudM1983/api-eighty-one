@@ -319,15 +319,44 @@ class OrderController extends AbstractController
     }
 
     /**
-     * API: Fournit le Token au Widget Colissimo (Frontend)
+     * API: Search Colissimo PUDOs (Updated May 2025)
      */
-    #[Route('/colissimo/widget-token', name: 'api_colissimo_token', methods: ['GET'])]
-    public function getColissimoToken(): JsonResponse
+    #[Route('/pudo/colissimo/search', name: 'api_order_colissimo_search', methods: ['POST'])]
+    public function searchColissimoPudos(Request $request): JsonResponse
     {
+        $data = json_decode($request->getContent(), true);
+
+        // Colissimo 2025 requiert l'adresse pour plus de précision
+        $address = $data['address'] ?? ''; 
+        $zipCode = $data['postalCode'] ?? $data['zipCode'] ?? null;
+        $city = $data['city'] ?? null;
+        $countryCode = $data['countryCode'] ?? 'FR';
+        $weightInKg = $data['totalWeight'] ?? 0.0;
+
+        if (empty($zipCode) || empty($city)) {
+            return $this->json(['error' => 'Code postal et ville obligatoires.'], 400);
+        }
+
         try {
-            return $this->json(['token' => $this->colissimoService->generateWidgetToken()]);
+            $pudos = $this->colissimoService->searchPointsRetrait(
+                $address,
+                $zipCode,
+                $city,
+                $countryCode,
+                (float) $weightInKg
+            );
+
+            return $this->json([
+                'success' => true,
+                'pudos' => $pudos,
+                'count' => count($pudos)
+            ]);
         } catch (\Exception $e) {
-            return $this->json(['error' => $e->getMessage()], 500);
+            return $this->json([
+                'error' => 'Erreur lors de la recherche Colissimo.',
+                'details' => $e->getMessage()
+            ], 500);
         }
     }
+    
 }
