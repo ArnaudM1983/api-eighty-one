@@ -320,6 +320,8 @@ class OrderController extends AbstractController
 
     /**
      * API: Search Colissimo PUDOs (Updated May 2025)
+     * HTTP Method: POST
+     * URL: /api/order/pudo/colissimo/search
      */
     #[Route('/pudo/colissimo/search', name: 'api_order_colissimo_search', methods: ['POST'])]
     public function searchColissimoPudos(Request $request): JsonResponse
