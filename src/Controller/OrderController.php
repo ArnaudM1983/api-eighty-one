@@ -9,6 +9,7 @@ use App\Entity\Payment;
 use App\Entity\Cart;
 use App\Service\TariffCalculatorService;
 use App\Service\MondialRelayService;
+use App\Service\ColissimoService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -26,7 +27,8 @@ class OrderController extends AbstractController
         private SerializerInterface $serializer,
         private ValidatorInterface $validator,
         private TariffCalculatorService $tariffCalculatorService,
-        private MondialRelayService $mondialRelayService
+        private MondialRelayService $mondialRelayService,
+        private ColissimoService $colissimoService
     ) {}
 
     /**
@@ -231,6 +233,9 @@ class OrderController extends AbstractController
     }
 
 
+    /**
+     * API: Enregistre les infos de livraison (Domicile ou Point Relais)
+     */
     #[Route('/{id}/shipping', name: 'api_order_update_shipping', methods: ['POST'])]
     public function updateShippingInfo(Order $order, Request $request): JsonResponse
     {
@@ -245,28 +250,26 @@ class OrderController extends AbstractController
         $shippingInfo = $order->getShippingInfo() ?: new ShippingInfo();
         $shippingInfo->setOrder($order);
 
-        // Mapping de l'adresse Client (Facturation)
-        $shippingInfo->setFirstName($data['firstName']);
-        $shippingInfo->setLastName($data['lastName']);
-        $shippingInfo->setAddress($data['address']);
-        $shippingInfo->setPostalCode($data['postalCode']);
-        $shippingInfo->setCity($data['city']);
-        $shippingInfo->setCountry($data['country']);
-        $shippingInfo->setPhone($data['phone'] ?? null);
+        // Données client
+        $shippingInfo->setFirstName($data['firstName'] ?? '');
+        $shippingInfo->setLastName($data['lastName'] ?? '');
+        $shippingInfo->setAddress($data['address'] ?? '');
+        $shippingInfo->setPostalCode($data['postalCode'] ?? '');
+        $shippingInfo->setCity($data['city'] ?? '');
+        $shippingInfo->setCountry($data['country'] ?? 'FR');
 
-        // Mapping de l'adresse Point Relais (Livraison)
+        // Mapping des données PUDO (Widget Colissimo ou Mondial Relay)
+        // Le widget Colissimo renvoie des champs que vous devrez mapper en React 
+        // vers ces clés JSON avant d'envoyer à Symfony :
         if (isset($data['pudoId'])) {
             $shippingInfo->setPudoId($data['pudoId']);
             $shippingInfo->setPudoName($data['pudoName']);
             $shippingInfo->setPudoAddress($data['pudoAddress']);
             $shippingInfo->setPudoPostalCode($data['pudoPostalCode']);
             $shippingInfo->setPudoCity($data['pudoCity']);
-            $shippingInfo->setPudoCountry($data['pudoCountry']);
+            $shippingInfo->setPudoCountry($data['pudoCountry'] ?? 'FR');
         } else {
-            // Nettoyage si on change de méthode
-            $shippingInfo->setPudoId(null);
-            $shippingInfo->setPudoName(null);
-            $shippingInfo->setPudoAddress(null);
+            $shippingInfo->setPudoId(null); // Nettoyage si domicile
         }
 
         $this->em->persist($shippingInfo);
@@ -312,6 +315,19 @@ class OrderController extends AbstractController
                 'error' => 'Erreur lors de la recherche des Points Relais.',
                 'details' => $e->getMessage()
             ], 400);
+        }
+    }
+
+    /**
+     * API: Fournit le Token au Widget Colissimo (Frontend)
+     */
+    #[Route('/colissimo/widget-token', name: 'api_colissimo_token', methods: ['GET'])]
+    public function getColissimoToken(): JsonResponse
+    {
+        try {
+            return $this->json(['token' => $this->colissimoService->generateWidgetToken()]);
+        } catch (\Exception $e) {
+            return $this->json(['error' => $e->getMessage()], 500);
         }
     }
 }
