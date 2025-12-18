@@ -14,6 +14,9 @@ class ColissimoService
         private ?string $colissimoCodTiers = null
     ) {}
 
+    /**
+     * Recherche les points de retrait et parse les horaires.
+     */
     public function searchPointsRetrait(
         string $address,
         string $zipCode,
@@ -21,26 +24,23 @@ class ColissimoService
         string $countryCode = 'FR',
         float $weightInKg = 0.1
     ): array {
-        // La doc demande le poids en grammes (entier)
         $weightInGrams = (int) ($weightInKg * 1000);
         if ($weightInGrams <= 0) $weightInGrams = 100;
 
         try {
-            // Note: Respect strict de la casse de la doc REST (Section II.5.2.5)
             $body = [
-                'apiKey'       => $this->colissimoApiKey, // 'K' majuscule selon l'exemple REST doc
+                'apiKey'       => $this->colissimoApiKey,
                 'address'      => $address,
                 'zipCode'      => $zipCode,
                 'city'         => strtoupper($city),
                 'countryCode'  => strtoupper($countryCode),
-                'weight'       => (string) $weightInGrams, // Doit être une chaîne de chiffres
+                'weight'       => (string) $weightInGrams,
                 'shippingDate' => (new \DateTime('+2 day'))->format('d/m/Y'),
                 'filterRelay'  => '1',
                 'lang'         => 'FR',
                 'optionInter'  => ($countryCode === 'FR') ? '0' : '1'
             ];
 
-            // Si partenaire, le champ s'appelle 'codeTiersPourPartenaire' en REST (Section II.2)
             if (!empty($this->colissimoCodTiers)) {
                 $body['codeTiersPourPartenaire'] = $this->colissimoCodTiers;
             }
@@ -53,10 +53,8 @@ class ColissimoService
                 'json' => $body
             ]);
 
-            // Récupération sécurisée du contenu
             $content = $response->getContent(false);
             
-            // La doc (I.5) impose l'UTF-8. On convertit si La Poste envoie du Latin-1 (ISO)
             if (!mb_check_encoding($content, 'UTF-8')) {
                 $content = mb_convert_encoding($content, 'UTF-8', 'ISO-8859-1');
             }
@@ -69,7 +67,6 @@ class ColissimoService
                 throw new \Exception("Colissimo Error ($statusCode): " . $errorMsg);
             }
 
-            // Extraction selon la structure II.8.2
             $points = $data['listePointRetraitAcheminement'] ?? [];
 
             return array_map(function ($point) {
@@ -77,13 +74,22 @@ class ColissimoService
                     'id'        => $point['identifiant'] ?? '',
                     'name'      => $point['nom'] ?? '',
                     'address'   => trim(($point['adresse1'] ?? '') . ' ' . ($point['adresse2'] ?? '')),
-                    'zipCode'   => $point['codePostal'] ?? '', // Attention: 'codePostal' dans le JSON retourné
+                    'zipCode'   => $point['codePostal'] ?? '',
                     'city'      => $point['localite'] ?? '',
                     'distance'  => $point['distanceEnMetre'] ?? 0,
                     'latitude'  => $point['coordGeolocalisationLatitude'] ?? null,
                     'longitude' => $point['coordGeolocalisationLongitude'] ?? null,
                     'type'      => $point['typeDePoint'] ?? '',
-                    'isOpen'    => !($point['congesTotal'] ?? false)
+                    'isOpen'    => !($point['congesTotal'] ?? false),
+                    'hours'     => [
+                        'Lundi'    => $this->parseColissimoHours($point['horairesOuvertureLundi'] ?? ''),
+                        'Mardi'    => $this->parseColissimoHours($point['horairesOuvertureMardi'] ?? ''),
+                        'Mercredi' => $this->parseColissimoHours($point['horairesOuvertureMercredi'] ?? ''),
+                        'Jeudi'    => $this->parseColissimoHours($point['horairesOuvertureJeudi'] ?? ''),
+                        'Vendredi' => $this->parseColissimoHours($point['horairesOuvertureVendredi'] ?? ''),
+                        'Samedi'   => $this->parseColissimoHours($point['horairesOuvertureSamedi'] ?? ''),
+                        'Dimanche' => $this->parseColissimoHours($point['horairesOuvertureDimanche'] ?? ''),
+                    ]
                 ];
             }, $points);
 
@@ -97,5 +103,49 @@ class ColissimoService
                 ]
             ];
         }
+    }
+
+    /**
+     * Transforme la chaîne Colissimo "09:00-12:00 14:00-18:00" en objet structuré.
+     */
+    private function parseColissimoHours(string $openingString): ?array
+    {
+        // Nettoyage des espaces et suppression des valeurs nulles
+        $s = trim(preg_replace('/\s+/', ' ', $openingString));
+        
+        if (empty($s) || $s === '00:00-00:00 00:00-00:00') {
+            return null;
+        }
+
+        $parts = explode(' ', $s);
+        $morning = $parts[0] ?? '00:00-00:00';
+        $afternoon = $parts[1] ?? '00:00-00:00';
+
+        // Helper interne pour extraire et formater (ex: "09:00" -> "0900")
+        $extract = function($range) {
+            $times = explode('-', $range);
+            $start = $times[0] ?? '00:00';
+            $end = $times[1] ?? '00:00';
+
+            return [
+                'start' => ($start !== '00:00') ? str_replace(':', '', $start) : null,
+                'end'   => ($end !== '00:00') ? str_replace(':', '', $end) : null,
+            ];
+        };
+
+        $am = $extract($morning);
+        $pm = $extract($afternoon);
+
+        // Si aucune heure valide n'est trouvée
+        if (!$am['start'] && !$pm['start']) {
+            return null;
+        }
+
+        return [
+            'am_start' => $am['start'],
+            'am_end'   => $am['end'],
+            'pm_start' => $pm['start'],
+            'pm_end'   => $pm['end'],
+        ];
     }
 }
