@@ -4,8 +4,12 @@ namespace App\Entity;
 
 use App\Repository\PaymentRepository;
 use Doctrine\ORM\Mapping as ORM;
+use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
 
 #[ORM\Entity(repositoryClass: PaymentRepository::class)]
+#[ORM\Table(name: 'payment')]
+// Cette contrainte empêche d'avoir deux lignes avec le même order_id ET la même method
+#[ORM\UniqueConstraint(name: 'UNIQ_PAYMENT_ORDER_METHOD', columns: ['order_id', 'method'])]
 class Payment
 {
     #[ORM\Id]
