@@ -113,7 +113,7 @@ class CartController extends AbstractController
 
         $price = $variant ? $variant->getPrice() : $product->getPrice();
         $unitWeight = $variant ? $variant->getWeight() : $product->getWeight();
-        
+
         // Vérifie si l’item existe déjà dans le panier
         $existing = null;
         foreach ($cart->getItems() as $item) {
@@ -135,14 +135,13 @@ class CartController extends AbstractController
                 ], 400);
             }
             $existing->setQuantity($newQty);
-            
         } else {
             $item = (new CartItem())
                 ->setProduct($product)
                 ->setVariant($variant)
                 ->setPrice($price)
                 ->setQuantity($requestedQty)
-                ->setWeight($unitWeight) 
+                ->setWeight($unitWeight)
                 ->setCart($cart);
 
             $cart->addItem($item);
@@ -178,7 +177,7 @@ class CartController extends AbstractController
                 'items' => [],
                 'total' => 0,
                 'cartToken' => null,
-                'totalWeight' => 0.0, 
+                'totalWeight' => 0.0,
             ]);
         }
 
@@ -189,7 +188,7 @@ class CartController extends AbstractController
                 'items' => [],
                 'total' => 0,
                 'cartToken' => $token,
-                'totalWeight' => 0.0, 
+                'totalWeight' => 0.0,
             ]);
         }
 
@@ -199,7 +198,7 @@ class CartController extends AbstractController
             $variantImage = $i->getVariant()?->getImage();
             $productImage = $i->getProduct()->getMainImage();
             $unitWeight = $i->getWeight() ?? 0.0;
-            $totalWeight = $i->getTotalWeight(); 
+            $totalWeight = $i->getTotalWeight();
 
             return [
                 'itemId' => $i->getId(),
@@ -211,7 +210,7 @@ class CartController extends AbstractController
                 'total' => $i->getPrice() * $i->getQuantity(),
                 'weight' => $unitWeight,
                 'totalWeight' => $totalWeight,
-                
+
                 'image' => $formatImagePath($variantImage ?? $productImage)
             ];
         }, $cart->getItems()->toArray());
@@ -220,7 +219,7 @@ class CartController extends AbstractController
             'items' => $items,
             'total' => $cart->getTotalPrice(),
             'cartToken' => $cart->getToken(),
-            'totalWeight' => $cart->getTotalWeight(), 
+            'totalWeight' => $cart->getTotalWeight(),
         ]);
     }
 
@@ -263,13 +262,13 @@ class CartController extends AbstractController
         $this->em->flush();
 
         $cart = $item->getCart();
-        
+
         return $this->json([
             'success' => true,
             'itemId' => $item->getId(),
             'quantity' => $item->getQuantity(),
             'availableStock' => $availableStock,
-            'totalWeight' => $cart->getTotalWeight() 
+            'totalWeight' => $cart->getTotalWeight()
         ]);
     }
 
@@ -283,17 +282,25 @@ class CartController extends AbstractController
     public function clear(Request $request): JsonResponse
     {
         $cart = $this->getCartFromCookie($request);
-        if (!$cart) {
-            return $this->json(['success' => true, 'message' => 'Panier déjà vide']);
+
+        if ($cart) {
+            // 1. On supprime d'abord les enfants
+            foreach ($cart->getItems() as $item) {
+                $this->em->remove($item);
+            }
+
+            // 2. On "flush" une première fois pour libérer les clés étrangères
+            $this->em->flush();
+
+            // 3. Maintenant on peut supprimer le parent
+            $this->em->remove($cart);
+            $this->em->flush();
         }
 
-        foreach ($cart->getItems() as $item) {
-            $this->em->remove($item);
-        }
+        $response = $this->json(['success' => true]);
+        $response->headers->clearCookie('cart_token', '/', null);
 
-        $this->em->flush();
-
-        return $this->json(['success' => true, 'message' => 'Panier vidé']);
+        return $response;
     }
 
 
@@ -310,13 +317,13 @@ class CartController extends AbstractController
 
         $this->em->remove($item);
         $this->em->flush();
-        
+
         $cart = $item->getCart();
 
         return $this->json([
-            'success' => true, 
+            'success' => true,
             'message' => 'Item supprimé',
-            'totalWeight' => $cart->getTotalWeight() 
+            'totalWeight' => $cart->getTotalWeight()
         ]);
     }
 }
