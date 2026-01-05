@@ -21,27 +21,22 @@ class StripeController extends AbstractController
     public function createIntent(Order $order, EntityManagerInterface $em): JsonResponse
     {
         Stripe::setApiKey($this->getParameter('stripe_secret_key'));
-
         $total = $order->getTotal();
-        if (!$total || $total <= 0) {
-            return $this->json(['error' => 'Montant de commande invalide'], 400);
-        }
 
-        // 1. Chercher si un paiement Stripe "pending" existe déjà pour cette commande
+        // 1. On cherche s'il y a déjà un paiement
         $payment = $em->getRepository(Payment::class)->findOneBy([
             'order' => $order,
-            'status' => 'pending',
             'method' => 'stripe'
         ]);
 
         try {
             if ($payment) {
-                // Optionnel : Mettre à jour le montant chez Stripe si le panier a changé
+                // Si trouvé, on met à jour l'existant chez Stripe
                 $intent = PaymentIntent::update($payment->getTransactionId(), [
                     'amount' => (int)($total * 100),
                 ]);
             } else {
-                // 2. Sinon, créer un tout nouveau PaymentIntent
+                // Si non trouvé, on en crée un nouveau
                 $intent = PaymentIntent::create([
                     'amount' => (int)($total * 100),
                     'currency' => 'eur',
@@ -49,27 +44,39 @@ class StripeController extends AbstractController
                     'metadata' => ['order_id' => $order->getId()]
                 ]);
 
-                // Créer l'entrée en base uniquement si elle n'existe pas
                 $payment = new Payment();
                 $payment->setOrder($order);
                 $payment->setMethod('stripe');
                 $payment->setTransactionId($intent->id);
             }
 
-            // 3. Toujours synchroniser le montant et le statut
             $payment->setAmount($total);
             $payment->setStatus('pending');
 
             $em->persist($payment);
             $em->flush();
-
-            return $this->json([
-                'clientSecret' => $intent->client_secret,
-                'total' => $total
-            ]);
         } catch (\Exception $e) {
-            return $this->json(['error' => $e->getMessage()], 500);
+            // --- LE FIX EST ICI ---
+            // Si l'erreur est une violation d'unicité (Requête B), on essaie de récupérer 
+            // le paiement que la Requête A vient juste de créer.
+            $em->clear(); // On vide l'EntityManager pour rafraîchir les données
+            $payment = $em->getRepository(Payment::class)->findOneBy([
+                'order' => $order,
+                'method' => 'stripe'
+            ]);
+
+            if (!$payment) {
+                return $this->json(['error' => 'Erreur critique lors de la création du paiement'], 500);
+            }
+
+            // On récupère l'intent Stripe pour renvoyer le clientSecret à React
+            $intent = PaymentIntent::retrieve($payment->getTransactionId());
         }
+
+        return $this->json([
+            'clientSecret' => $intent->client_secret,
+            'total' => $total
+        ]);
     }
 
     #[Route('/stripe/webhook', name: 'api_stripe_webhook', methods: ['POST'])]
