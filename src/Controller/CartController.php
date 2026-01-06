@@ -284,15 +284,15 @@ class CartController extends AbstractController
         $cart = $this->getCartFromCookie($request);
 
         if ($cart) {
-            // 1. On supprime d'abord les enfants
+            // Suppression des item
             foreach ($cart->getItems() as $item) {
                 $this->em->remove($item);
             }
 
-            // 2. On "flush" une première fois pour libérer les clés étrangères
+            // Flush pour libérer les clés étrangères
             $this->em->flush();
 
-            // 3. Maintenant on peut supprimer le parent
+            // Suppression du panier
             $this->em->remove($cart);
             $this->em->flush();
         }
