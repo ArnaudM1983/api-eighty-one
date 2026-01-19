@@ -4,6 +4,7 @@ namespace App\Controller;
 
 use App\Entity\Order;
 use App\Entity\Payment;
+use App\Service\EmailService;
 use Doctrine\ORM\EntityManagerInterface;
 use Stripe\Stripe;
 use Stripe\PaymentIntent;
@@ -80,7 +81,7 @@ class StripeController extends AbstractController
     }
 
     #[Route('/stripe/webhook', name: 'api_stripe_webhook', methods: ['POST'])]
-    public function handleWebhook(Request $request, EntityManagerInterface $em): Response
+    public function handleWebhook(Request $request, EntityManagerInterface $em, EmailService $emailService): Response
     {
         $payload = $request->getContent();
         $sigHeader = $request->headers->get('Stripe-Signature');
@@ -105,16 +106,18 @@ class StripeController extends AbstractController
             ]);
 
             if ($payment) {
-                // 1. Mettre à jour le paiement
+                // Mise à jour du paiement
                 $payment->setStatus('success');
 
-                // 2. Mettre à jour la commande liée
+                // Mise à jour de la commande liée
                 $order = $payment->getOrder();
                 $order->setStatus('paid');
 
-                // On peut aussi imaginer l'envoi d'un mail ici via un Service
-
                 $em->flush();
+
+                // --- ENVOI DE L'EMAIL ---
+                $emailService->sendOrderConfirmation($order); // Mail Client
+                $emailService->sendAdminNotification($order); // Mail Admin
             }
         }
 

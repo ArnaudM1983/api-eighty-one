@@ -251,6 +251,7 @@ class OrderController extends AbstractController
         $shippingInfo->setOrder($order);
 
         // Données client
+        $shippingInfo->setEmail($data['email'] ?? null);
         $shippingInfo->setFirstName($data['firstName'] ?? '');
         $shippingInfo->setLastName($data['lastName'] ?? '');
         $shippingInfo->setAddress($data['address'] ?? '');

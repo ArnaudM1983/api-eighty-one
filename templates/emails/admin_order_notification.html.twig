@@ -1,0 +1,111 @@
+{# templates/emails/admin_order_notification.html.twig #}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: 'Arial', sans-serif; color: #222; line-height: 1.4; background-color: #f4f4f4; margin: 0; padding: 20px; }
+        .container { max-width: 650px; margin: 0 auto; background: #ffffff; padding: 20px; border: 2px solid #e0e0e0; }
+        
+        .header { background: #000; color: #fff; padding: 15px; text-align: center; margin-bottom: 20px; }
+        .badge { display: inline-block; padding: 5px 10px; border-radius: 4px; font-weight: bold; font-size: 12px; text-transform: uppercase; }
+        .badge-relay { background: #e3f2fd; color: #0d47a1; } 
+        .badge-home { background: #f3e5f5; color: #4a148c; }
+        
+        .section-title { font-size: 14px; font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #eee; padding-bottom: 5px; margin: 20px 0 10px 0; color: #555; }
+        
+        .logistics-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        .logistics-table th { text-align: left; background: #333; color: #fff; padding: 8px; font-size: 12px; }
+        .logistics-table td { padding: 10px; border: 1px solid #eee; font-size: 14px; }
+        
+        /* Mise en évidence de la quantité pour le préparateur */
+        .qty-cell { font-weight: bold; font-size: 20px; color: #d32f2f; background: #fff5f5; text-align: center; width: 50px; border: 2px solid #d32f2f !important; }
+        
+        .info-box { background: #fafafa; padding: 15px; border: 1px solid #eee; margin-bottom: 10px; }
+        .footer { text-align: center; font-size: 12px; color: #999; margin-top: 30px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2 style="margin:0;">NOUVELLE COMMANDE #{{ order.id }}</h2>
+            <p style="margin:5px 0 0 0; font-size: 13px;">Reçue le {{ "now"|date("d/m/Y H:i") }}</p>
+        </div>
+
+        <div class="section-title">📦 À PRÉPARER</div>
+        <table class="logistics-table">
+            <thead>
+                <tr>
+                    <th>Qté</th>
+                    <th>Désignation / Référence</th>
+                    <th>Variante</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in order.items %}
+                    <tr>
+                        <td class="qty-cell">{{ item.quantity }}</td>
+                        <td>
+                            <strong>{{ item.product.name }}</strong><br>
+                            <small style="color: #666;">ID Produit: {{ item.product.id }}</small>
+                        </td>
+                        <td>
+                            {% if item.variant %}
+                                {{ item.variant.name }}
+                                <br><small style="color: #666;">SKU: {{ item.variant.id }}</small>
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="section-title">🚚 EXPÉDITION</div>
+        <div class="info-box">
+            {% if order.shippingInfo.pudoId %}
+                <span class="badge badge-relay">Point Relais ({{ order.shippingMethod }})</span>
+                <p style="margin-top:10px;">
+                    <strong>ID Relais : {{ order.shippingInfo.pudoId }}</strong><br>
+                    <strong>{{ order.shippingInfo.pudoName }}</strong><br>
+                    {{ order.shippingInfo.pudoAddress }}<br>
+                    {{ order.shippingInfo.pudoPostalCode }} {{ order.shippingInfo.pudoCity }}
+                </p>
+            {% else %}
+                <span class="badge badge-home">Domicile ({{ order.shippingMethod }})</span>
+                <p style="margin-top:10px;">
+                    <strong>{{ order.shippingInfo.firstName }} {{ order.shippingInfo.lastName }}</strong><br>
+                    {{ order.shippingInfo.address }}<br>
+                    {{ order.shippingInfo.postalCode }} {{ order.shippingInfo.city }}<br>
+                    {{ order.shippingInfo.country|upper }}
+                </p>
+            {% endif %}
+        </div>
+
+        <div class="section-title">👤 CONTACT CLIENT</div>
+        <div class="info-box">
+            Nom : <strong>{{ order.shippingInfo.lastName|upper }} {{ order.shippingInfo.firstName }}</strong><br>
+            Email : <a href="mailto:{{ order.shippingInfo.email }}">{{ order.shippingInfo.email }}</a>
+        </div>
+
+        <div class="section-title">💰 RÉCAPITULATIF FINANCIER</div>
+        <div class="info-box">
+            Total Commande : <strong>{{ order.total|number_format(2, ',', ' ') }} €</strong><br>
+            Frais de port : {{ order.shippingCost|number_format(2, ',', ' ') }} €<br>
+            Poids total : {{ order.totalWeight }}g
+        </div>
+
+        <div style="margin-top: 30px; text-align: center;">
+            <a href="http://localhost:3000/admin/orders/{{ order.id }}" 
+               style="background: #000; color: #fff; padding: 12px 25px; text-decoration: none; font-weight: bold; border-radius: 4px; display: inline-block;">
+                VOIR DANS LE BACK-OFFICE
+            </a>
+        </div>
+
+        <div class="footer">
+            Eighty One System - Notification Logistique
+        </div>
+    </div>
+</body>
+</html>
