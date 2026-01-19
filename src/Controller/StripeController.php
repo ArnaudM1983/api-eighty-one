@@ -116,7 +116,8 @@ class StripeController extends AbstractController
                 $em->flush();
 
                 // --- ENVOI DE L'EMAIL ---
-                $emailService->sendOrderConfirmation($order);
+                $emailService->sendOrderConfirmation($order); // Mail Client
+                $emailService->sendAdminNotification($order); // Mail Admin
             }
         }
 
