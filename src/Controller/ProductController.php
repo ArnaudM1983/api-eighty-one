@@ -37,7 +37,10 @@ class ProductController extends AbstractController
         $products = $this->repo->findAll();
         $data = array_map(fn(Product $p) => $this->serializeProduct($p), $products);
 
-        return $this->json($data);
+        return $this->json($data, 200, [
+        'Access-Control-Expose-Headers' => 'x-total-count',
+        'x-total-count' => (string)count($products)
+    ]);
     }
 
     /**
