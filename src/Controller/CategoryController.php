@@ -12,20 +12,20 @@ use Symfony\Component\Routing\Annotation\Route;
 class CategoryController extends AbstractController
 {
     #[Route('', methods: ['GET'])]
-public function index(CategoryRepository $repo): JsonResponse
-{
-    // On ne récupère que les parents pour structurer l'arbre
-    $categories = $repo->findBy(['parent' => null]);
-    
-    $data = array_map(fn(Category $c) => [
-        'id' => $c->getId(),
-        'name' => $c->getName(),
-        'children' => array_map(fn(Category $child) => [
-            'id' => $child->getId(),
-            'name' => $child->getName(),
-        ], $c->getChildren()->toArray())
-    ], $categories);
+    public function index(CategoryRepository $repo): JsonResponse
+    {
+        // On ne récupère que les parents pour structurer l'arbre
+        $categories = $repo->findBy(['parent' => null]);
 
-    return $this->json($data);
-}
+        $data = array_map(fn(Category $c) => [
+            'id' => $c->getId(),
+            'name' => $c->getName(),
+            'children' => array_map(fn(Category $child) => [
+                'id' => $child->getId(),
+                'name' => $child->getName(),
+            ], $c->getChildren()->toArray())
+        ], $categories);
+
+        return $this->json($data);
+    }
 }
