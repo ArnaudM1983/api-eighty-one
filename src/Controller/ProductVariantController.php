@@ -86,7 +86,7 @@ class ProductVariantController extends AbstractController
      * URL: /api/variants/{id}
      * Description: Update an variant.
      **/
-    #[Route('/{id}', methods: ['PUT'])]
+    #[Route('/{id}', methods: ['PUT', 'PATCH'])]
     public function update(Request $request, ProductVariant $variant): JsonResponse
     {
         $data = json_decode($request->getContent(), true);

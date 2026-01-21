@@ -29,18 +29,20 @@ class ProductController extends AbstractController
      * CRUD: Read (List)
      * HTTP Method: GET
      * URL: /api/products
-     * Description: Retrieve all products with categories, images, and variants.
      **/
     #[Route('', methods: ['GET'])]
     public function getAll(): JsonResponse
     {
-        $products = $this->repo->findAll();
+        // On récupère TOUS les produits sans limite
+        $products = $this->repo->findBy([], ['id' => 'DESC']);
+        $total = count($products);
+
         $data = array_map(fn(Product $p) => $this->serializeProduct($p), $products);
 
         return $this->json($data, 200, [
-        'Access-Control-Expose-Headers' => 'x-total-count',
-        'x-total-count' => (string)count($products)
-    ]);
+            'x-total-count' => (string)$total,
+            'Access-Control-Expose-Headers' => 'x-total-count'
+        ]);
     }
 
     /**
@@ -260,6 +262,26 @@ class ProductController extends AbstractController
         return $this->json([
             'stock' => $product->getStock()
         ]);
+    }
+
+    /**
+     * Mettre à jour uniquement le stock (Produit principal)
+     * URL: PATCH /api/products/{id}
+     */
+    #[Route('/{id}', methods: ['PATCH'])]
+    public function updateStock(Request $request, Product $product): JsonResponse
+    {
+        $data = json_decode($request->getContent(), true);
+
+        if (isset($data['stock'])) {
+            $product->setStock((int) $data['stock']);
+            $product->setUpdatedAt(new \DateTimeImmutable());
+            $this->em->flush();
+
+            return $this->json(['message' => 'Stock mis à jour avec succès', 'stock' => $product->getStock()]);
+        }
+
+        return $this->json(['error' => 'Donnée de stock manquante'], 400);
     }
 
     private function serializeProductWithoutVariants(Product $product): array
