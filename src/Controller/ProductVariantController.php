@@ -54,7 +54,6 @@ class ProductVariantController extends AbstractController
      * CRUD: Create
      * HTTP Method: POST
      * URL: /api/variants
-     * Description: Create a new variant.
      **/
     #[Route('', methods: ['POST'])]
     public function create(Request $request): JsonResponse
@@ -62,22 +61,37 @@ class ProductVariantController extends AbstractController
         $data = json_decode($request->getContent(), true);
 
         $variant = new ProductVariant();
-        $variant->setName($data['name']);
+        $variant->setName($data['name'] ?? '');
         $variant->setSku($data['sku'] ?? null);
-        $variant->setPrice($data['price'] ?? null);
-        $variant->setStock($data['stock'] ?? null);
+        
+        // Gestion du prix : On ne le set que s'il est envoyé 
+        // (Sinon le getter dynamique utilisera celui du parent)
+        if (!empty($data['price'])) {
+            $variant->setPrice($data['price']);
+        }
+        
+        $variant->setStock(isset($data['stock']) ? (int)$data['stock'] : 0);
         $variant->setImage($data['image'] ?? null);
         $variant->setAttributes($data['attributes'] ?? []);
 
-        if (!empty($data['product_id'])) {
-            $product = $this->em->getRepository(Product::class)->find($data['product_id']);
-            if ($product) $variant->setProduct($product);
+        // RÉCUPÉRATION DU PRODUIT PARENT (Clé 'product' ou 'product_id')
+        $pId = $data['product'] ?? $data['product_id'] ?? null;
+
+        if ($pId) {
+            $product = $this->em->getRepository(Product::class)->find($pId);
+            if (!$product) {
+                return $this->json(['error' => 'Produit parent introuvable'], 404);
+            }
+            $variant->setProduct($product);
+        } else {
+            return $this->json(['error' => 'L\'ID du produit parent est requis'], 400);
         }
 
         $this->em->persist($variant);
         $this->em->flush();
 
-        return $this->json(['message' => 'Variant created', 'id' => $variant->getId()], 201);
+        // Pour Refine, il est préférable de renvoyer l'objet complet sérialisé
+        return $this->json($this->serializeVariant($variant), 201);
     }
 
     /**

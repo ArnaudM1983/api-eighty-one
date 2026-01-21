@@ -157,17 +157,18 @@ class ProductController extends AbstractController
         return $this->json(['message' => 'Product created', 'id' => $product->getId()], 201);
     }
 
+
     /**
      * CRUD: Update
      * HTTP Method: PUT
      * URL: /api/products/{id}
-     * Description: Update an existing product with optional categories and images.
      **/
     #[Route('/{id}', methods: ['PUT'])]
     public function update(Request $request, Product $product): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
 
+        // Mise à jour des champs basiques
         if (isset($data['name'])) $product->setName($data['name']);
         if (isset($data['slug'])) $product->setSlug($data['slug']);
         if (isset($data['description'])) $product->setDescription($data['description']);
@@ -176,42 +177,56 @@ class ProductController extends AbstractController
         if (isset($data['price'])) $product->setPrice($data['price']);
         if (isset($data['stock'])) $product->setStock($data['stock']);
         if (isset($data['featured'])) $product->setFeatured($data['featured']);
-        // --------------------------------------------------
-        // TODO: Update stockage local pour main_image
-        // Remplacer 'main_image' par l'upload local si nécessaire
-        // --------------------------------------------------
         if (isset($data['main_image'])) $product->setMainImage($data['main_image']);
 
-        // Update categories
+        // Update des catégories
         if (isset($data['category_ids'])) {
-            $product->getCategories()->clear();
+            // 1. On vide les catégories actuelles liées au produit
+            foreach ($product->getCategories() as $category) {
+                $product->removeCategory($category);
+            }
+
+            // 2. On ajoute les nouvelles catégories sélectionnées
             foreach ($data['category_ids'] as $catId) {
                 $category = $this->em->getRepository(Category::class)->find($catId);
-                if ($category) $product->addCategory($category);
+                if ($category) {
+                    $product->addCategory($category);
+                }
             }
         }
 
-        // Update images
-        // --------------------------------------------------
-        // TODO: Update stockage local pour images supplémentaires
-        // Supprimer les images existantes si nécessaire
-        // Puis uploader les nouveaux fichiers dans /public/uploads/products/
-        // et stocker les URLs relatives
-        // --------------------------------------------------
+        // --- LOGIQUE CORRIGÉE POUR LES IMAGES (MINIATURES) ---
         if (isset($data['images'])) {
-            $product->getImages()->clear();
+            // On récupère les images actuelles pour les comparer
+            $currentImages = $product->getImages();
+
+            // 1. On supprime TOUTES les images actuelles via la méthode removeImage
+            // Cela garantit que Doctrine marque les entités pour suppression (DELETE)
+            foreach ($currentImages as $image) {
+                $product->removeImage($image);
+            }
+
+            // 2. On ajoute les images reçues dans la requête
             foreach ($data['images'] as $imgData) {
-                $image = new ProductImage();
-                $image->setUrl($imgData['url']);
-                $image->setAlt($imgData['alt'] ?? null);
-                $product->addImage($image);
+                if (!empty($imgData['url'])) {
+                    $newImage = new ProductImage();
+                    // On s'assure de ne pas avoir de slash en trop au début
+                    $url = ltrim($imgData['url'], '/');
+                    $newImage->setUrl($url);
+                    $newImage->setAlt($product->getName());
+                    $product->addImage($newImage);
+                }
             }
         }
 
         $product->setUpdatedAt(new \DateTimeImmutable());
+
+        // Le flush va maintenant exécuter les DELETE pour les orphelins 
+        // et les INSERT pour les nouvelles images
         $this->em->flush();
 
-        return $this->json(['message' => 'Product updated']);
+        // Il est recommandé de renvoyer le produit sérialisé pour Refine
+        return $this->json($this->serializeProduct($product));
     }
 
     /**
