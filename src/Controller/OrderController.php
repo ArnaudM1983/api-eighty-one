@@ -5,8 +5,8 @@ namespace App\Controller;
 use App\Entity\Order;
 use App\Entity\ShippingInfo;
 use App\Entity\OrderItem;
-use App\Entity\Payment;
 use App\Entity\Cart;
+use App\Repository\OrderRepository;
 use App\Service\TariffCalculatorService;
 use App\Service\MondialRelayService;
 use App\Service\ColissimoService;
@@ -15,242 +15,237 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Annotation\Route;
-use Symfony\Component\Serializer\SerializerInterface;
-use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 #[Route('/api/order')]
 class OrderController extends AbstractController
 {
-
     public function __construct(
         private EntityManagerInterface $em,
-        private SerializerInterface $serializer,
-        private ValidatorInterface $validator,
         private TariffCalculatorService $tariffCalculatorService,
         private MondialRelayService $mondialRelayService,
         private ColissimoService $colissimoService
     ) {}
 
     /**
-     * CRUD: Create Order
-     * HTTP Method: POST
-     * URL: /api/order/create
+     * CRUD: List all orders (Dashboard Admin)
      */
-    #[Route('/create', name: 'api_order_create', methods: ['POST'])]
-    public function createOrder(Request $request, EntityManagerInterface $em): JsonResponse
+    #[Route('', name: 'api_order_list', methods: ['GET'])]
+    public function listOrders(OrderRepository $repo): JsonResponse
     {
-        $data = json_decode($request->getContent(), true);
-        $cartToken = $data['cartToken'] ?? null;
-        $cart = $em->getRepository(Cart::class)->findOneBy(['token' => $cartToken]);
+        $orders = $repo->findBy([], ['createdAt' => 'DESC']);
 
-        if (!$cart) {
-            return $this->json(['error' => 'Panier introuvable'], 404);
-        }
+        $data = array_map(function (Order $o) {
+            $shipping = $o->getShippingInfo();
+            return [
+                'id' => $o->getId(),
+                'customer' => $shipping ? ($shipping->getFirstName() . ' ' . $shipping->getLastName()) : 'Anonyme',
+                'email' => $shipping ? $shipping->getEmail() : 'N/A',
+                'shippingInfo' => [
+                    'address' => $shipping?->getAddress(),
+                    'city' => $shipping?->getCity(),
+                    'postalCode' => $shipping?->getPostalCode(),
+                ],
+                'total' => $o->getTotal(),
+                'status' => $o->getStatus(),
+                'createdAt' => $o->getCreatedAt()->format('d/m/Y H:i'),
+                'shippingMethod' => $o->getShippingMethod(),
+            ];
+        }, $orders);
 
-        $order = new Order();
-        $order->setCartToken($cartToken);
-        $order->setStatus('created');
-
-        try {
-            // Création des OrderItems à partir du panier (Items, Poids unitaire)
-            foreach ($cart->getItems() as $cartItem) {
-                // Vérification de sécurité critique: l'article est-il toujours valide?
-                if (!$cartItem->getProduct() || $cartItem->getQuantity() <= 0) {
-                    continue; // Ignore les items orphelins ou invalides
-                }
-
-                $orderItem = new OrderItem();
-                $orderItem->setProduct($cartItem->getProduct());
-                $orderItem->setVariant($cartItem->getVariant());
-                $orderItem->setQuantity($cartItem->getQuantity());
-
-                // Assurez-vous que le prix et le poids ne sont pas nulls ici si la DB l'exige
-                $orderItem->setPrice($cartItem->getPrice() ?? '0.00');
-                $orderItem->setWeight($cartItem->getWeight() ?? 0.0);
-
-                $order->addItem($orderItem);
-            }
-
-            // Si la commande n'a finalement aucun article valide
-            if ($order->getItems()->isEmpty()) {
-                return $this->json(['error' => 'Le panier ne contient aucun article valide pour la commande.'], 400);
-            }
-
-            // Stock le poids total
-            $order->setTotalWeight($cart->getTotalWeight() ?? 0.0);
-
-            // Initialiser le champ $total avec le sous-total
-            $order->setTotal($order->getSubTotal());
-
-            $em->persist($order);
-            $em->flush();
-
-            // Retour JSON de succès
-            return $this->json([
-                'success' => true,
-                'message' => 'Commande initiale créée',
-                'orderId' => $order->getId(),
-                'subTotal' => $order->getSubTotal(),
-                'total' => $order->getTotal(),
-                'totalWeight' => $order->getTotalWeight()
-            ]);
-        } catch (\Exception $e) {
-            // --- CATCHER L'ERREUR DE PERSISTANCE ET RENVOYER LE DÉTAIL ---
-            return $this->json([
-                'error' => 'Erreur serveur lors de la persistance de la commande.',
-                'details' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine()
-            ], 500);
-        }
+        return $this->json($data);
     }
 
     /**
-     * CRUD: Delete an order
-     * HTTP Method: DELETE
-     * URL: /api/order/{id}
-     */
-    #[Route('/{id}', name: 'api_order_delete', methods: ['DELETE'])]
-    public function deleteOrder(Order $order): JsonResponse
-    {
-        // Contrôle de sécurité: Interdire la suppression si la commande est payée
-        if ($order->getStatus() !== 'created' && $order->getStatus() !== 'cancelled') {
-
-            return $this->json(['error' => 'Impossible de supprimer cette commande. Statut actuel: ' . $order->getStatus()], 403);
-        }
-
-        try {
-
-            $this->em->remove($order);
-            $this->em->flush();
-
-            return $this->json([
-                'success' => true,
-                'message' => "La commande #{$order->getId()} a été supprimée avec succès."
-            ], 200);
-        } catch (\Exception $e) {
-            return $this->json([
-                'error' => 'Erreur inattendue lors de la suppression de la commande.',
-                'details' => $e->getMessage()
-            ], 500);
-        }
-    }
-
-
-    /**
-     * CRUD: Get an order
-     * HTTP Method: GET
-     * URL: /api/order/{id}
-     * Get an order by id
+     * CRUD: Get an order detail (Admin & Front Client)
      */
     #[Route('/{id}', name: 'api_order_get', methods: ['GET'])]
-    public function getOrder(int $id, EntityManagerInterface $em): JsonResponse
+    public function getOrder(int $id, OrderRepository $repo, Request $request): JsonResponse
     {
-        $order = $em->getRepository(Order::class)->find($id);
+        $order = $repo->find($id);
 
         if (!$order) {
             return $this->json(['error' => 'Commande introuvable'], 404);
         }
 
-        // Création du tableau des items de la commande (OrderItem)
-        $items = array_map(function ($item) {
-            return [
-                'orderItemId' => $item->getId(),
-                'productId' => $item->getProduct()?->getId(),
-                'variantId' => $item->getVariant()?->getId(),
-                'name' => $item->getProduct()?->getName(),
-                'quantity' => $item->getQuantity(),
-                'price' => $item->getPrice(),
-                'total' => $item->getTotalPrice(),
-                'weight' => $item->getWeight(),
-                // 'totalWeight' a été retiré car il est sur Order, pas OrderItem
-            ];
-        }, $order->getItems()->toArray());
-
-        $payments = array_map(function ($payment) {
-            return [
-                'paymentId' => $payment->getId(),
-                'amount' => $payment->getAmount(),
-                'status' => $payment->getStatus(),
-                'method' => $payment->getMethod(),
-                'transactionId' => $payment->getTransactionId(),
-            ];
-        }, $order->getPayments()->toArray());
+        $shipping = $order->getShippingInfo();
+        
+        // Calcul TVA Globale (20% incluse dans le TTC)
+        $totalTtc = (float)$order->getTotal();
+        $totalTax = round($totalTtc - ($totalTtc / 1.2), 2);
 
         return $this->json([
+            // Clés pour Refine Admin
+            'id' => $order->getId(), 
+            
+            // Clés pour le Front Client & Dashboard
             'orderId' => $order->getId(),
-            'cartToken' => $order->getCartToken(),
-
-            // --- AJOUT DE LA LISTE DES ARTICLES ---
-            'items' => $items,
-
-            'total' => $order->getTotal(),
-            'totalWeight' => $order->getTotalWeight(),
             'status' => $order->getStatus(),
-            'createdAt' => $order->getCreatedAt()->format('Y-m-d H:i:s'),
-            'updatedAt' => $order->getUpdatedAt()->format('Y-m-d H:i:s'),
+            'total' => $order->getTotal(),
+            'totalTax' => $totalTax, 
+            'totalWeight' => $order->getTotalWeight(),
+            'createdAt' => $order->getCreatedAt()->format('d/m/Y H:i'),
+            'shippingMethod' => $order->getShippingMethod(),
+            'shippingCost' => $order->getShippingCost(),
+            'customerIp' => $request->getClientIp() ?? '82.125.144.12', 
 
-            'payments' => $payments,
+            'customer' => $shipping ? ($shipping->getFirstName() . ' ' . $shipping->getLastName()) : 'Anonyme',
+            'shippingInfo' => [
+                'firstName' => $shipping?->getFirstName(),
+                'lastName' => $shipping?->getLastName(),
+                'email' => $shipping?->getEmail(),
+                'phone' => $shipping?->getPhone() ?? '06 00 00 00 00',
+                'address' => $shipping?->getAddress(),
+                'city' => $shipping?->getCity(),
+                'postalCode' => $shipping?->getPostalCode(),
+                'country' => $shipping?->getCountry() ?? 'FR',
+                'pudoId' => $shipping?->getPudoId(),
+                'pudoName' => $shipping?->getPudoName(),
+                'pudoAddress' => $shipping?->getPudoAddress(),
+                'pudoPostalCode' => $shipping?->getPudoPostalCode(),
+                'pudoCity' => $shipping?->getPudoCity(),
+            ],
+
+            'items' => array_map(function($item) {
+                $lineTotalTtc = (float)$item->getTotalPrice();
+                return [
+                    'orderItemId' => $item->getId(),
+                    'name' => $item->getProduct()?->getName(),
+                    'variantName' => $item->getVariant()?->getName(),
+                    // Récupération de l'UGS (SKU)
+                    'sku' => $item->getVariant() ? $item->getVariant()->getSku() : ($item->getProduct() ? $item->getProduct()->getSku() : 'N/A'),
+                    'quantity' => $item->getQuantity(),
+                    'price' => $item->getPrice(), 
+                    'total' => $item->getTotalPrice(),
+                    'taxAmount' => round($lineTotalTtc - ($lineTotalTtc / 1.2), 2),
+                ];
+            }, $order->getItems()->toArray()),
+
+            'payments' => array_map(fn($p) => [
+                'paymentId' => $p->getId(),
+                'transactionId' => $p->getTransactionId(),
+                'status' => $p->getStatus(),
+                'amount' => $p->getAmount(),
+                'method' => $p->getMethod() ?? 'Carte Bancaire',
+            ], $order->getPayments()->toArray()),
         ]);
     }
 
     /**
-     * API: Calculate Shipping Tariff
-     * HTTP Method: POST
-     * URL: /api/shipping/calculate
+     * API: Update Status (Dashboard Admin)
+     */
+    #[Route('/{id}/status', name: 'api_order_update_status', methods: ['PATCH', 'PUT'])]
+    public function updateStatus(Order $order, Request $request): JsonResponse
+    {
+        $data = json_decode($request->getContent(), true);
+        $newStatus = $data['status'] ?? null;
+
+        $allowedStatuses = ['created', 'paid', 'shipped', 'completed', 'cancelled'];
+        if (!$newStatus || !in_array($newStatus, $allowedStatuses)) {
+            return $this->json(['error' => 'Statut invalide'], 400);
+        }
+
+        $order->setStatus($newStatus);
+        $order->setUpdatedAt(new \DateTimeImmutable());
+        $this->em->flush();
+
+        return $this->json(['success' => true, 'newStatus' => $order->getStatus()]);
+    }
+
+    /**
+     * CRUD: Create Order (Front Client)
+     */
+    #[Route('/create', name: 'api_order_create', methods: ['POST'])]
+    public function createOrder(Request $request): JsonResponse
+    {
+        $data = json_decode($request->getContent(), true);
+        $cartToken = $data['cartToken'] ?? null;
+        $cart = $this->em->getRepository(Cart::class)->findOneBy(['token' => $cartToken]);
+
+        if (!$cart) return $this->json(['error' => 'Panier introuvable'], 404);
+
+        $order = new Order();
+        $order->setCartToken($cartToken);
+        $order->setStatus('created');
+
+        foreach ($cart->getItems() as $cartItem) {
+            if (!$cartItem->getProduct() || $cartItem->getQuantity() <= 0) continue;
+
+            $orderItem = new OrderItem();
+            $orderItem->setProduct($cartItem->getProduct());
+            $orderItem->setVariant($cartItem->getVariant());
+            $orderItem->setQuantity($cartItem->getQuantity());
+            $orderItem->setPrice($cartItem->getPrice() ?? '0.00');
+            $orderItem->setWeight($cartItem->getWeight() ?? 0.0);
+            $order->addItem($orderItem);
+        }
+
+        if ($order->getItems()->isEmpty()) return $this->json(['error' => 'Panier vide'], 400);
+
+        $order->setTotalWeight($cart->getTotalWeight() ?? 0.0);
+        $order->setTotal($order->getSubTotal());
+
+        $this->em->persist($order);
+        $this->em->flush();
+
+        return $this->json([
+            'success' => true,
+            'orderId' => $order->getId(),
+            'subTotal' => $order->getSubTotal(),
+            'total' => $order->getTotal(),
+            'totalWeight' => $order->getTotalWeight()
+        ]);
+    }
+
+    /**
+     * CRUD: Delete an order
+     */
+    #[Route('/{id}', name: 'api_order_delete', methods: ['DELETE'])]
+    public function deleteOrder(Order $order): JsonResponse
+    {
+        if ($order->getStatus() !== 'created' && $order->getStatus() !== 'cancelled') {
+            return $this->json(['error' => 'Suppression impossible pour ce statut'], 403);
+        }
+
+        $this->em->remove($order);
+        $this->em->flush();
+
+        return $this->json(['success' => true]);
+    }
+
+    /**
+     * API: Calculate Shipping (Front Client)
      */
     #[Route('/shipping/calculate', name: 'api_shipping_calculate', methods: ['POST'])]
     public function calculateShipping(Request $request): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
-
-        $weightInKg = $data['totalWeight'] ?? 0.0;
+        $weightInKg = (float)($data['totalWeight'] ?? 0.0);
         $modeCode = $data['modeCode'] ?? null;
         $countryCode = $data['countryCode'] ?? 'FR';
 
-        if (empty($modeCode) || $weightInKg <= 0) {
-            return $this->json(['error' => 'Poids ou mode de livraison manquant.'], 400);
-        }
+        if (!$modeCode || $weightInKg <= 0) return $this->json(['error' => 'Données manquantes'], 400);
 
         try {
-            $shippingCost = $this->tariffCalculatorService->calculateShippingCost(
-                (float) $weightInKg,
-                $modeCode,
-                $countryCode
-            );
-
-            return $this->json([
-                'success' => true,
-                'shippingCost' => number_format($shippingCost, 2, '.', ''),
-                'message' => 'Tarif calculé avec succès.'
-            ]);
+            $cost = $this->tariffCalculatorService->calculateShippingCost($weightInKg, $modeCode, $countryCode);
+            return $this->json(['success' => true, 'shippingCost' => number_format($cost, 2, '.', '')]);
         } catch (\Exception $e) {
-            return $this->json([
-                'error' => 'Impossible de calculer le tarif.',
-                'details' => $e->getMessage()
-            ], 400);
+            return $this->json(['error' => $e->getMessage()], 400);
         }
     }
 
-
     /**
-     * API: Enregistre les infos de livraison (Domicile ou Point Relais)
+     * API: Update Shipping Info (Front Client)
      */
     #[Route('/{id}/shipping', name: 'api_order_update_shipping', methods: ['POST'])]
     public function updateShippingInfo(Order $order, Request $request): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
-
-        // 1. Mise à jour de la commande
         $order->setShippingMethod($data['shippingMethod'] ?? 'pickup');
         $order->setShippingCost($data['shippingCost'] ?? 0);
         $order->setTotal($order->getTotalPrice());
 
-        // 2. Gestion de ShippingInfo
         $shippingInfo = $order->getShippingInfo() ?: new ShippingInfo();
         $shippingInfo->setOrder($order);
-
-        // Données client
         $shippingInfo->setEmail($data['email'] ?? null);
         $shippingInfo->setFirstName($data['firstName'] ?? '');
         $shippingInfo->setLastName($data['lastName'] ?? '');
@@ -259,18 +254,14 @@ class OrderController extends AbstractController
         $shippingInfo->setCity($data['city'] ?? '');
         $shippingInfo->setCountry($data['country'] ?? 'FR');
 
-        // Mapping des données PUDO (Widget Colissimo ou Mondial Relay)
-        // Le widget Colissimo renvoie des champs que vous devrez mapper en React 
-        // vers ces clés JSON avant d'envoyer à Symfony :
         if (isset($data['pudoId'])) {
             $shippingInfo->setPudoId($data['pudoId']);
             $shippingInfo->setPudoName($data['pudoName']);
             $shippingInfo->setPudoAddress($data['pudoAddress']);
             $shippingInfo->setPudoPostalCode($data['pudoPostalCode']);
             $shippingInfo->setPudoCity($data['pudoCity']);
-            $shippingInfo->setPudoCountry($data['pudoCountry'] ?? 'FR');
         } else {
-            $shippingInfo->setPudoId(null); // Nettoyage si domicile
+            $shippingInfo->setPudoId(null);
         }
 
         $this->em->persist($shippingInfo);
@@ -281,85 +272,45 @@ class OrderController extends AbstractController
 
     /**
      * API: Search Mondial Relay PUDOs
-     * HTTP Method: POST
-     * URL: /api/order/pudo/search
      */
     #[Route('/pudo/search', name: 'api_order_pudo_search', methods: ['POST'])]
     public function searchPudos(Request $request): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
-
-        // Idéalement, récupérer ces valeurs du ShippingInfo si elles existent déjà
         $postalCode = $data['postalCode'] ?? null;
         $countryCode = $data['countryCode'] ?? 'FR';
-        $weightInKg = $data['totalWeight'] ?? 0.0; // Poids en KG
+        $weightInKg = (float)($data['totalWeight'] ?? 0.0);
 
-        if (empty($postalCode) || $weightInKg <= 0) {
-            return $this->json(['error' => 'Code postal ou poids manquant.'], 400);
-        }
+        if (!$postalCode || $weightInKg <= 0) return $this->json(['error' => 'Données manquantes'], 400);
 
         try {
-            // Le service gère la conversion KG -> Grammes et l'appel SOAP
-            $pudos = $this->mondialRelayService->searchPointsRelais(
-                $postalCode,
-                $countryCode,
-                (float) $weightInKg
-            );
-
-            return $this->json([
-                'success' => true,
-                'pudos' => $pudos,
-                'message' => count($pudos) . ' Points Relais trouvés.'
-            ]);
+            $pudos = $this->mondialRelayService->searchPointsRelais($postalCode, $countryCode, $weightInKg);
+            return $this->json(['success' => true, 'pudos' => $pudos]);
         } catch (\Exception $e) {
-            return $this->json([
-                'error' => 'Erreur lors de la recherche des Points Relais.',
-                'details' => $e->getMessage()
-            ], 400);
+            return $this->json(['error' => $e->getMessage()], 400);
         }
     }
 
     /**
-     * API: Search Colissimo PUDOs (Updated May 2025)
-     * HTTP Method: POST
-     * URL: /api/order/pudo/colissimo/search
+     * API: Search Colissimo PUDOs
      */
     #[Route('/pudo/colissimo/search', name: 'api_order_colissimo_search', methods: ['POST'])]
     public function searchColissimoPudos(Request $request): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
-
-        // Colissimo 2025 requiert l'adresse pour plus de précision
-        $address = $data['address'] ?? ''; 
+        $address = $data['address'] ?? '';
         $zipCode = $data['postalCode'] ?? $data['zipCode'] ?? null;
         $city = $data['city'] ?? null;
         $countryCode = $data['countryCode'] ?? 'FR';
-        $weightInKg = $data['totalWeight'] ?? 0.0;
+        $weightInKg = (float)($data['totalWeight'] ?? 0.0);
 
-        if (empty($zipCode) || empty($city)) {
-            return $this->json(['error' => 'Code postal et ville obligatoires.'], 400);
-        }
+        if (!$zipCode || !$city) return $this->json(['error' => 'Données manquantes'], 400);
 
         try {
-            $pudos = $this->colissimoService->searchPointsRetrait(
-                $address,
-                $zipCode,
-                $city,
-                $countryCode,
-                (float) $weightInKg
-            );
-
-            return $this->json([
-                'success' => true,
-                'pudos' => $pudos,
-                'count' => count($pudos)
-            ]);
+            $pudos = $this->colissimoService->searchPointsRetrait($address, $zipCode, $city, $countryCode, $weightInKg);
+            return $this->json(['success' => true, 'pudos' => $pudos, 'count' => count($pudos)]);
         } catch (\Exception $e) {
-            return $this->json([
-                'error' => 'Erreur lors de la recherche Colissimo.',
-                'details' => $e->getMessage()
-            ], 500);
+            return $this->json(['error' => $e->getMessage()], 500);
         }
     }
-    
 }
