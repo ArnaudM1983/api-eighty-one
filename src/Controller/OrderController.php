@@ -6,6 +6,7 @@ use App\Entity\Order;
 use App\Entity\ShippingInfo;
 use App\Entity\OrderItem;
 use App\Entity\Cart;
+use App\Entity\Payment;
 use App\Repository\OrderRepository;
 use App\Service\TariffCalculatorService;
 use App\Service\MondialRelayService;
@@ -68,7 +69,7 @@ class OrderController extends AbstractController
         }
 
         $shipping = $order->getShippingInfo();
-        
+
         // Calcul TVA Globale (20% incluse dans le TTC)
         $totalTtc = (float)$order->getTotal();
         $totalTax = round($totalTtc - ($totalTtc / 1.2), 2);
@@ -82,11 +83,11 @@ class OrderController extends AbstractController
         }
 
         return $this->json([
-            'id' => $order->getId(), 
+            'id' => $order->getId(),
             'orderId' => $order->getId(),
             'status' => $order->getStatus(),
             'total' => $order->getTotal(),
-            'totalTax' => $totalTax, 
+            'totalTax' => $totalTax,
             'totalWeight' => $order->getTotalWeight(),
             'createdAt' => $order->getCreatedAt()->format('d/m/Y H:i'),
             'shippingMethod' => $order->getShippingMethod(),
@@ -111,7 +112,7 @@ class OrderController extends AbstractController
                 'pudoCity' => $shipping?->getPudoCity(),
             ],
 
-            'items' => array_map(function($item) {
+            'items' => array_map(function ($item) {
                 $lineTotalTtc = (float)$item->getTotalPrice();
                 return [
                     'orderItemId' => $item->getId(),
@@ -119,7 +120,7 @@ class OrderController extends AbstractController
                     'variantName' => $item->getVariant()?->getName(),
                     'sku' => $item->getVariant() ? $item->getVariant()->getSku() : ($item->getProduct() ? $item->getProduct()->getSku() : 'N/A'),
                     'quantity' => $item->getQuantity(),
-                    'price' => $item->getPrice(), 
+                    'price' => $item->getPrice(),
                     'total' => $item->getTotalPrice(),
                     'taxAmount' => round($lineTotalTtc - ($lineTotalTtc / 1.2), 2),
                 ];
@@ -146,7 +147,7 @@ class OrderController extends AbstractController
 
         $order->setShippingMethod($method);
         $order->setShippingCost($data['shippingCost'] ?? 0);
-        
+
         // Si retrait boutique : le statut reste "created" (En attente) pour ton admin
         if ($method === 'pickup' && $order->getStatus() === 'created') {
             $order->setStatus('created');
@@ -184,7 +185,7 @@ class OrderController extends AbstractController
      * API: Update Status (Dashboard Admin)
      */
     #[Route('/{id}/status', name: 'api_order_update_status', methods: ['PATCH', 'PUT'])]
-    public function updateStatus(Order $order, Request $request): JsonResponse
+    public function updateStatus(Order $order, Request $request, EntityManagerInterface $em): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
         $newStatus = $data['status'] ?? null;
@@ -194,11 +195,46 @@ class OrderController extends AbstractController
             return $this->json(['error' => 'Statut invalide'], 400);
         }
 
+        // --- LOGIQUE ENCAISSEMENT BOUTIQUE & NETTOYAGE DES DOUBLONS ---
+        // Si la commande passe en "Retirée" (shipped) et que c'est un retrait boutique (pickup)
+        if ($newStatus === 'shipped' && $order->getShippingMethod() === 'pickup' && $order->getStatus() === 'created') {
+            
+            // 1. On cherche les paiements existants pour cette commande (ex: la tentative Stripe abandonnée)
+            $existingPayments = $em->getRepository(Payment::class)->findBy(['order' => $order]);
+            
+            foreach ($existingPayments as $p) {
+                if ($p->getStatus() === 'pending') {
+                    // Option A: On marque comme annulé pour l'historique
+                    $p->setStatus('cancelled'); 
+                    $p->setUpdatedAt(new \DateTimeImmutable());
+                    
+                    // Option B (Décommenter si vous préférez supprimer physiquement la ligne) :
+                    // $em->remove($p);
+                }
+            }
+
+            // 2. On crée le nouveau paiement "Boutique" validé
+            $payment = new Payment();
+            $payment->setOrder($order);
+            $payment->setMethod('boutique');
+            $payment->setAmount($order->getTotal()); 
+            $payment->setStatus('success'); // On valide l'encaissement immédiat au comptoir
+            $payment->setTransactionId('CASH-' . $order->getId() . '-' . time());
+            $payment->setUpdatedAt(new \DateTimeImmutable());
+
+            $em->persist($payment);
+        }
+
+        // 3. Mise à jour du statut de la commande
         $order->setStatus($newStatus);
         $order->setUpdatedAt(new \DateTimeImmutable());
-        $this->em->flush();
+        
+        $em->flush();
 
-        return $this->json(['success' => true, 'newStatus' => $order->getStatus()]);
+        return $this->json([
+            'success' => true, 
+            'newStatus' => $order->getStatus()
+        ]);
     }
 
     /**
