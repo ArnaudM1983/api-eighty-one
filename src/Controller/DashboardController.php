@@ -6,6 +6,7 @@ use App\Repository\OrderRepository;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Annotation\Route;
+use App\Entity\OrderItem;
 
 #[Route('/api/dashboard')]
 class DashboardController extends AbstractController
@@ -60,6 +61,8 @@ class DashboardController extends AbstractController
                 ['name' => 'Sem 3', 'sales' => round($currentRevenue * 0.8, 2)],
                 ['name' => 'Sem 4', 'sales' => round($currentRevenue, 2)],
             ];
+
+
 
             return $this->json([
                 'revenue' => [

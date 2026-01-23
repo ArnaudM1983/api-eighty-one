@@ -139,4 +139,11 @@ class Payment
 
         return max(0, $this->order->getTotal() - $totalPaid);
     }
+
+    public function setUpdatedAt(?\DateTimeInterface $updatedAt): self
+    {
+        $this->updatedAt = $updatedAt;
+
+        return $this;
+    }
 }
