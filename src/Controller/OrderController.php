@@ -56,7 +56,7 @@ class OrderController extends AbstractController
     }
 
     /**
-     * CRUD: Get an order detail (Admin & Front Client)
+     * CRUD: Get order detail (Admin & Front Client)
      */
     #[Route('/{id}', name: 'api_order_get', methods: ['GET'])]
     public function getOrder(int $id, OrderRepository $repo, Request $request): JsonResponse
@@ -73,11 +73,16 @@ class OrderController extends AbstractController
         $totalTtc = (float)$order->getTotal();
         $totalTax = round($totalTtc - ($totalTtc / 1.2), 2);
 
+        // --- LOGIQUE PAIEMENT BOUTIQUE VS STRIPE ---
+        $paymentTypeDisplay = "En attente Stripe";
+        if ($order->getStatus() === 'paid' || $order->getStatus() === 'shipped' || $order->getStatus() === 'completed') {
+            $paymentTypeDisplay = "Payé par Carte (Stripe)";
+        } elseif ($order->getShippingMethod() === 'pickup') {
+            $paymentTypeDisplay = "À payer en boutique (Espèces/Comptoir)";
+        }
+
         return $this->json([
-            // Clés pour Refine Admin
             'id' => $order->getId(), 
-            
-            // Clés pour le Front Client & Dashboard
             'orderId' => $order->getId(),
             'status' => $order->getStatus(),
             'total' => $order->getTotal(),
@@ -86,14 +91,15 @@ class OrderController extends AbstractController
             'createdAt' => $order->getCreatedAt()->format('d/m/Y H:i'),
             'shippingMethod' => $order->getShippingMethod(),
             'shippingCost' => $order->getShippingCost(),
-            'customerIp' => $request->getClientIp() ?? '82.125.144.12', 
+            'customerIp' => $request->getClientIp() ?? 'Non détectée',
+            'paymentTypeDisplay' => $paymentTypeDisplay,
 
             'customer' => $shipping ? ($shipping->getFirstName() . ' ' . $shipping->getLastName()) : 'Anonyme',
             'shippingInfo' => [
                 'firstName' => $shipping?->getFirstName(),
                 'lastName' => $shipping?->getLastName(),
                 'email' => $shipping?->getEmail(),
-                'phone' => $shipping?->getPhone() ?? '06 00 00 00 00',
+                'phone' => $shipping?->getPhone() ?? 'N/A',
                 'address' => $shipping?->getAddress(),
                 'city' => $shipping?->getCity(),
                 'postalCode' => $shipping?->getPostalCode(),
@@ -111,7 +117,6 @@ class OrderController extends AbstractController
                     'orderItemId' => $item->getId(),
                     'name' => $item->getProduct()?->getName(),
                     'variantName' => $item->getVariant()?->getName(),
-                    // Récupération de l'UGS (SKU)
                     'sku' => $item->getVariant() ? $item->getVariant()->getSku() : ($item->getProduct() ? $item->getProduct()->getSku() : 'N/A'),
                     'quantity' => $item->getQuantity(),
                     'price' => $item->getPrice(), 
@@ -128,6 +133,51 @@ class OrderController extends AbstractController
                 'method' => $p->getMethod() ?? 'Carte Bancaire',
             ], $order->getPayments()->toArray()),
         ]);
+    }
+
+    /**
+     * API: Update Shipping Info (Finalise le choix livraison + Statut Boutique)
+     */
+    #[Route('/{id}/shipping', name: 'api_order_update_shipping', methods: ['POST'])]
+    public function updateShippingInfo(Order $order, Request $request): JsonResponse
+    {
+        $data = json_decode($request->getContent(), true);
+        $method = $data['shippingMethod'] ?? 'pickup';
+
+        $order->setShippingMethod($method);
+        $order->setShippingCost($data['shippingCost'] ?? 0);
+        
+        // Si retrait boutique : le statut reste "created" (En attente) pour ton admin
+        if ($method === 'pickup' && $order->getStatus() === 'created') {
+            $order->setStatus('created');
+        }
+
+        $order->setTotal($order->getTotalPrice());
+
+        $shippingInfo = $order->getShippingInfo() ?: new ShippingInfo();
+        $shippingInfo->setOrder($order);
+        $shippingInfo->setEmail($data['email'] ?? null);
+        $shippingInfo->setFirstName($data['firstName'] ?? '');
+        $shippingInfo->setLastName($data['lastName'] ?? '');
+        $shippingInfo->setAddress($data['address'] ?? '');
+        $shippingInfo->setPostalCode($data['postalCode'] ?? '');
+        $shippingInfo->setCity($data['city'] ?? '');
+        $shippingInfo->setCountry($data['country'] ?? 'FR');
+
+        if (isset($data['pudoId'])) {
+            $shippingInfo->setPudoId($data['pudoId']);
+            $shippingInfo->setPudoName($data['pudoName']);
+            $shippingInfo->setPudoAddress($data['pudoAddress']);
+            $shippingInfo->setPudoPostalCode($data['pudoPostalCode']);
+            $shippingInfo->setPudoCity($data['pudoCity']);
+        } else {
+            $shippingInfo->setPudoId(null);
+        }
+
+        $this->em->persist($shippingInfo);
+        $this->em->flush();
+
+        return $this->json(['success' => true]);
     }
 
     /**
@@ -152,7 +202,7 @@ class OrderController extends AbstractController
     }
 
     /**
-     * CRUD: Create Order (Front Client)
+     * CRUD: Create Order
      */
     #[Route('/create', name: 'api_order_create', methods: ['POST'])]
     public function createOrder(Request $request): JsonResponse
@@ -192,28 +242,11 @@ class OrderController extends AbstractController
             'orderId' => $order->getId(),
             'subTotal' => $order->getSubTotal(),
             'total' => $order->getTotal(),
-            'totalWeight' => $order->getTotalWeight()
         ]);
     }
 
     /**
-     * CRUD: Delete an order
-     */
-    #[Route('/{id}', name: 'api_order_delete', methods: ['DELETE'])]
-    public function deleteOrder(Order $order): JsonResponse
-    {
-        if ($order->getStatus() !== 'created' && $order->getStatus() !== 'cancelled') {
-            return $this->json(['error' => 'Suppression impossible pour ce statut'], 403);
-        }
-
-        $this->em->remove($order);
-        $this->em->flush();
-
-        return $this->json(['success' => true]);
-    }
-
-    /**
-     * API: Calculate Shipping (Front Client)
+     * API: Calculate Shipping
      */
     #[Route('/shipping/calculate', name: 'api_shipping_calculate', methods: ['POST'])]
     public function calculateShipping(Request $request): JsonResponse
@@ -223,51 +256,12 @@ class OrderController extends AbstractController
         $modeCode = $data['modeCode'] ?? null;
         $countryCode = $data['countryCode'] ?? 'FR';
 
-        if (!$modeCode || $weightInKg <= 0) return $this->json(['error' => 'Données manquantes'], 400);
-
         try {
             $cost = $this->tariffCalculatorService->calculateShippingCost($weightInKg, $modeCode, $countryCode);
             return $this->json(['success' => true, 'shippingCost' => number_format($cost, 2, '.', '')]);
         } catch (\Exception $e) {
             return $this->json(['error' => $e->getMessage()], 400);
         }
-    }
-
-    /**
-     * API: Update Shipping Info (Front Client)
-     */
-    #[Route('/{id}/shipping', name: 'api_order_update_shipping', methods: ['POST'])]
-    public function updateShippingInfo(Order $order, Request $request): JsonResponse
-    {
-        $data = json_decode($request->getContent(), true);
-        $order->setShippingMethod($data['shippingMethod'] ?? 'pickup');
-        $order->setShippingCost($data['shippingCost'] ?? 0);
-        $order->setTotal($order->getTotalPrice());
-
-        $shippingInfo = $order->getShippingInfo() ?: new ShippingInfo();
-        $shippingInfo->setOrder($order);
-        $shippingInfo->setEmail($data['email'] ?? null);
-        $shippingInfo->setFirstName($data['firstName'] ?? '');
-        $shippingInfo->setLastName($data['lastName'] ?? '');
-        $shippingInfo->setAddress($data['address'] ?? '');
-        $shippingInfo->setPostalCode($data['postalCode'] ?? '');
-        $shippingInfo->setCity($data['city'] ?? '');
-        $shippingInfo->setCountry($data['country'] ?? 'FR');
-
-        if (isset($data['pudoId'])) {
-            $shippingInfo->setPudoId($data['pudoId']);
-            $shippingInfo->setPudoName($data['pudoName']);
-            $shippingInfo->setPudoAddress($data['pudoAddress']);
-            $shippingInfo->setPudoPostalCode($data['pudoPostalCode']);
-            $shippingInfo->setPudoCity($data['pudoCity']);
-        } else {
-            $shippingInfo->setPudoId(null);
-        }
-
-        $this->em->persist($shippingInfo);
-        $this->em->flush();
-
-        return $this->json(['success' => true]);
     }
 
     /**
@@ -280,8 +274,6 @@ class OrderController extends AbstractController
         $postalCode = $data['postalCode'] ?? null;
         $countryCode = $data['countryCode'] ?? 'FR';
         $weightInKg = (float)($data['totalWeight'] ?? 0.0);
-
-        if (!$postalCode || $weightInKg <= 0) return $this->json(['error' => 'Données manquantes'], 400);
 
         try {
             $pudos = $this->mondialRelayService->searchPointsRelais($postalCode, $countryCode, $weightInKg);
@@ -303,8 +295,6 @@ class OrderController extends AbstractController
         $city = $data['city'] ?? null;
         $countryCode = $data['countryCode'] ?? 'FR';
         $weightInKg = (float)($data['totalWeight'] ?? 0.0);
-
-        if (!$zipCode || !$city) return $this->json(['error' => 'Données manquantes'], 400);
 
         try {
             $pudos = $this->colissimoService->searchPointsRetrait($address, $zipCode, $city, $countryCode, $weightInKg);
