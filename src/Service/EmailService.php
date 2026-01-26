@@ -86,4 +86,23 @@ class EmailService
 
         $this->mailer->send($email);
     }
+
+    /**
+     * Mail envoyé dès que la commande "Pickup" est validée 
+     * (soit après paiement Stripe, soit après validation du choix Boutique)
+     */
+    public function sendPickupConfirmation(Order $order): void
+    {
+        $shippingInfo = $order->getShippingInfo();
+        if (!$shippingInfo || !$shippingInfo->getEmail()) return;
+
+        $email = (new TemplatedEmail())
+            ->from(new Address(self::STORE_EMAIL, self::STORE_NAME))
+            ->to(new Address($shippingInfo->getEmail(), $shippingInfo->getFirstName()))
+            ->subject('Confirmation de votre commande en retrait boutique - #' . $order->getId())
+            ->htmlTemplate('emails/order_pickup_confirmation.html.twig')
+            ->context(['order' => $order]);
+
+        $this->mailer->send($email);
+    }
 }

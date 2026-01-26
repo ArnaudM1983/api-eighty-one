@@ -11,6 +11,7 @@ use App\Repository\OrderRepository;
 use App\Service\TariffCalculatorService;
 use App\Service\MondialRelayService;
 use App\Service\ColissimoService;
+use App\Service\EmailService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -24,7 +25,8 @@ class OrderController extends AbstractController
         private EntityManagerInterface $em,
         private TariffCalculatorService $tariffCalculatorService,
         private MondialRelayService $mondialRelayService,
-        private ColissimoService $colissimoService
+        private ColissimoService $colissimoService,
+        private EmailService $emailService
     ) {}
 
     /**
@@ -137,7 +139,7 @@ class OrderController extends AbstractController
     }
 
     /**
-     * API: Update Shipping Info (Finalise le choix livraison + Statut Boutique)
+     * API: Update Shipping Info
      */
     #[Route('/{id}/shipping', name: 'api_order_update_shipping', methods: ['POST'])]
     public function updateShippingInfo(Order $order, Request $request): JsonResponse
@@ -148,13 +150,13 @@ class OrderController extends AbstractController
         $order->setShippingMethod($method);
         $order->setShippingCost($data['shippingCost'] ?? 0);
 
-        // Si retrait boutique : le statut reste "created" (En attente) pour ton admin
         if ($method === 'pickup' && $order->getStatus() === 'created') {
             $order->setStatus('created');
         }
 
         $order->setTotal($order->getTotalPrice());
 
+        // On lie bien les infos de livraison
         $shippingInfo = $order->getShippingInfo() ?: new ShippingInfo();
         $shippingInfo->setOrder($order);
         $shippingInfo->setEmail($data['email'] ?? null);
@@ -164,6 +166,7 @@ class OrderController extends AbstractController
         $shippingInfo->setPostalCode($data['postalCode'] ?? '');
         $shippingInfo->setCity($data['city'] ?? '');
         $shippingInfo->setCountry($data['country'] ?? 'FR');
+        $shippingInfo->setPhone($data['phone'] ?? null);
 
         if (isset($data['pudoId'])) {
             $shippingInfo->setPudoId($data['pudoId']);
@@ -176,7 +179,22 @@ class OrderController extends AbstractController
         }
 
         $this->em->persist($shippingInfo);
-        $this->em->flush();
+        $this->em->flush(); // On sauve en BDD avant d'envoyer le mail
+
+        // --- ENVOI DU MAIL ---
+        if ($method === 'pickup') {
+            // On force Doctrine à bien voir le lien entre Order et ShippingInfo
+            $order->setShippingInfo($shippingInfo);
+
+            try {
+                // On envoie les mails
+                $this->emailService->sendPickupConfirmation($order);
+                $this->emailService->sendAdminNotification($order);
+            } catch (\Exception $e) {
+                // IMPORTANT: Logguez l'erreur pour savoir SI ça plante et POURQUOI
+                error_log("MAIL ERROR: " . $e->getMessage());
+            }
+        }
 
         return $this->json(['success' => true]);
     }
@@ -198,16 +216,16 @@ class OrderController extends AbstractController
         // --- LOGIQUE ENCAISSEMENT BOUTIQUE & NETTOYAGE DES DOUBLONS ---
         // Si la commande passe en "Retirée" (shipped) et que c'est un retrait boutique (pickup)
         if ($newStatus === 'shipped' && $order->getShippingMethod() === 'pickup' && $order->getStatus() === 'created') {
-            
+
             // 1. On cherche les paiements existants pour cette commande (ex: la tentative Stripe abandonnée)
             $existingPayments = $em->getRepository(Payment::class)->findBy(['order' => $order]);
-            
+
             foreach ($existingPayments as $p) {
                 if ($p->getStatus() === 'pending') {
                     // Option A: On marque comme annulé pour l'historique
-                    $p->setStatus('cancelled'); 
+                    $p->setStatus('cancelled');
                     $p->setUpdatedAt(new \DateTimeImmutable());
-                    
+
                     // Option B (Décommenter si vous préférez supprimer physiquement la ligne) :
                     // $em->remove($p);
                 }
@@ -217,7 +235,7 @@ class OrderController extends AbstractController
             $payment = new Payment();
             $payment->setOrder($order);
             $payment->setMethod('boutique');
-            $payment->setAmount($order->getTotal()); 
+            $payment->setAmount($order->getTotal());
             $payment->setStatus('success'); // On valide l'encaissement immédiat au comptoir
             $payment->setTransactionId('CASH-' . $order->getId() . '-' . time());
             $payment->setUpdatedAt(new \DateTimeImmutable());
@@ -228,11 +246,11 @@ class OrderController extends AbstractController
         // 3. Mise à jour du statut de la commande
         $order->setStatus($newStatus);
         $order->setUpdatedAt(new \DateTimeImmutable());
-        
+
         $em->flush();
 
         return $this->json([
-            'success' => true, 
+            'success' => true,
             'newStatus' => $order->getStatus()
         ]);
     }

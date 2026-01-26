@@ -106,18 +106,20 @@ class StripeController extends AbstractController
             ]);
 
             if ($payment) {
-                // Mise à jour du paiement
                 $payment->setStatus('success');
-
-                // Mise à jour de la commande liée
                 $order = $payment->getOrder();
                 $order->setStatus('paid');
-
                 $em->flush();
 
-                // --- ENVOI DE L'EMAIL ---
-                $emailService->sendOrderConfirmation($order); // Mail Client
-                $emailService->sendAdminNotification($order); // Mail Admin
+                if ($order->getShippingMethod() === 'pickup') {
+                    // Envoi du mail spécifique Pickup
+                    $emailService->sendPickupConfirmation($order);
+                } else {
+                    // Envoi du mail de confirmation standard (Livraison)
+                    $emailService->sendOrderConfirmation($order);
+                }
+
+                $emailService->sendAdminNotification($order);
             }
         }
 
