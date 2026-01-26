@@ -63,4 +63,27 @@ class EmailService
 
         $this->mailer->send($email);
     }
+
+    /**
+     * Mail envoyé au CLIENT quand la commande est expédiée
+     */
+    public function sendShippingNotification(Order $order): void
+    {
+        $shippingInfo = $order->getShippingInfo();
+
+        if (!$shippingInfo || !$shippingInfo->getEmail()) {
+            return;
+        }
+
+        $email = (new TemplatedEmail())
+            ->from(new Address(self::STORE_EMAIL, self::STORE_NAME))
+            ->to(new Address($shippingInfo->getEmail(), $shippingInfo->getFirstName()))
+            ->subject('Bonne nouvelle ! Votre commande Eighty One #' . $order->getId() . ' est en route')
+            ->htmlTemplate('emails/order_shipped.html.twig')
+            ->context([
+                'order' => $order,
+            ]);
+
+        $this->mailer->send($email);
+    }
 }
