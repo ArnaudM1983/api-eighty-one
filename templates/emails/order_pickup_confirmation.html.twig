@@ -1,4 +1,4 @@
-{# templates/emails/order_confirmation.html.twig #}
+{# templates/emails/order_pickup_confirmation.html.twig #}
 <!DOCTYPE html>
 <html>
 <head>
@@ -9,14 +9,19 @@
         .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 20px; margin-bottom: 20px; }
         .table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
         .table th { text-align: left; background: #f8f8f8; padding: 10px; font-size: 11px; border-bottom: 1px solid #eee; }
-        .table td { padding: 10px; border-bottom: 1px solid #eee; font-size: 14px; }
+        .table td { padding: 10px; border-bottom: 1px solid #eee; font-size: 14px; vertical-align: middle; }
         .total-box { text-align: right; padding: 10px; background: #fafafa; }
         
-        /* Styles pour les adresses */
+        .product-img { width: 50px; height: 50px; object-fit: cover; border-radius: 4px; border: 1px solid #ddd; }
+        
         .address-section { margin-top: 30px; display: table; width: 100%; }
         .address-column { display: table-cell; width: 50%; padding: 15px; background: #f9f9f9; border: 1px solid #eee; vertical-align: top; }
         .address-header { font-weight: bold; text-transform: uppercase; font-size: 12px; margin-bottom: 10px; display: block; border-bottom: 1px solid #ccc; }
         
+        .status-box { padding: 15px; text-align: center; font-weight: bold; margin-bottom: 20px; border-radius: 4px; }
+        .status-paid { background-color: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
+        .status-unpaid { background-color: #fff3e0; color: #e65100; border: 1px solid #ffe0b2; }
+
         .footer { text-align: center; font-size: 11px; color: #999; margin-top: 40px; }
     </style>
 </head>
@@ -28,11 +33,25 @@
         </div>
 
         <p>Bonjour {{ order.shippingInfo.firstName }},</p>
-        <p>Merci pour votre commande ! Votre paiement a été validé et nous préparons vos articles.</p>
+        <p>Merci pour votre commande ! Vous avez choisi le <strong>retrait en magasin (Click & Collect)</strong>. Nous mettons vos articles de côté.</p>
+
+        {# Alerte de paiement #}
+        {% if order.status == 'paid' %}
+            <div class="status-box status-paid">
+                ✅ COMMANDE PAYÉE EN LIGNE<br>
+                <span style="font-weight: normal; font-size: 13px;">Vous n'aurez rien à régler lors du retrait.</span>
+            </div>
+        {% else %}
+            <div class="status-box status-unpaid">
+                💰 PAIEMENT À RÉALISER SUR PLACE<br>
+                <span style="font-weight: normal; font-size: 13px;">Montant à régler en boutique : {{ order.total|number_format(2, ',', ' ') }} €</span>
+            </div>
+        {% endif %}
 
         <table class="table">
             <thead>
                 <tr>
+                    <th style="width: 50px;">Image</th>
                     <th>Désignation</th>
                     <th style="text-align: center;">Qté</th>
                     <th style="text-align: right;">Prix</th>
@@ -41,6 +60,21 @@
             <tbody>
                 {% for item in order.items %}
                     <tr>
+                        <td>
+                            {% set thumb = null %}
+                            {% if item.variant and item.variant.image %}
+                                {% set thumb = item.variant.image %}
+                            {% elseif item.product.mainImage %}
+                                {% set thumb = item.product.mainImage %}
+                            {% endif %}
+
+                            {% if thumb %}
+                                {% set fullImageUrl = thumb starts with 'http' ? thumb : 'http://localhost:8000' ~ thumb %}
+                                <img src="{{ fullImageUrl }}" class="product-img" alt="Produit">
+                            {% else %}
+                                <div style="width:50px; height:50px; background:#eee; line-height:50px; color:#aaa; font-size:10px; text-align: center;">N/A</div>
+                            {% endif %}
+                        </td>
                         <td>
                             <strong>{{ item.product.name }}</strong>
                             {% if item.variant %}
@@ -56,44 +90,30 @@
 
         <div class="total-box">
             <p style="margin: 5px 0;">Sous-total : {{ order.subTotal|number_format(2, ',', ' ') }} €</p>
-            {% if order.shippingCost > 0 %}
-                <p style="margin: 5px 0;">Livraison ({{ order.shippingMethod }}) : {{ order.shippingCost|number_format(2, ',', ' ') }} €</p>
-            {% endif %}
+            <p style="margin: 5px 0;">Retrait boutique : Gratuit</p>
             <p style="font-size: 18px; font-weight: bold; margin: 10px 0;">Total TTC : {{ order.total|number_format(2, ',', ' ') }} €</p>
         </div>
 
         <div class="address-section">
             <div class="address-column">
-                <span class="address-header">Adresse de facturation</span>
+                <span class="address-header">Vos informations</span>
                 {{ order.shippingInfo.firstName }} {{ order.shippingInfo.lastName }}<br>
-                {{ order.shippingInfo.address }}<br>
-                {{ order.shippingInfo.phone }}<br>
-                {{ order.shippingInfo.postalCode }} {{ order.shippingInfo.city }}<br>
-                {{ order.shippingInfo.country }}
+                {{ order.shippingInfo.email }}<br>
+                {{ order.shippingInfo.phone }}
             </div>
 
             <div class="address-column" style="border-left: 10px solid white;">
-                <span class="address-header">Mode de livraison</span>
-                
-                {% if order.shippingInfo.pudoId %}
-                    {# CAS POINT RELAIS #}
-                    <strong>Point Relais : {{ order.shippingInfo.pudoName }}</strong><br>
-                    {{ order.shippingInfo.pudoAddress }}<br>
-                    {{ order.shippingInfo.pudoPostalCode }} {{ order.shippingInfo.pudoCity }}<br>
-                {% else %}
-                    {# CAS DOMICILE #}
-                    <strong>À domicile</strong><br>
-                    {{ order.shippingInfo.firstName }} {{ order.shippingInfo.lastName }}<br>
-                    {{ order.shippingInfo.address }}<br>
-                    {{ order.shippingInfo.postalCode }} {{ order.shippingInfo.city }}<br>
-                    {{ order.shippingInfo.country }}
-                {% endif %}
+                <span class="address-header">📍 Lieu de retrait</span>
+                <strong>Eighty One Store</strong><br>
+                21 rue des Capucins<br>
+                69001 Lyon<br>
+                <p style="font-size: 11px; color: #666; margin-top: 5px;">
+                    <strong>Horaires :</strong><br>
+                    Lundi : 14h - 19h<br>
+                    Mardi au Samedi : 11h - 19h
+                </p>
             </div>
         </div>
-
-        <p style="font-size: 13px; margin-top: 20px; clear: both;">
-            Dès que votre colis sera expédié, vous recevrez un nouvel email avec votre numéro de suivi.
-        </p>
 
         <div class="footer">
             Eighty One Store - 2026<br>
