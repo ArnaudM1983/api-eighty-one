@@ -201,12 +201,16 @@ class OrderController extends AbstractController
 
     /**
      * API: Update Status (Dashboard Admin)
+     * Déclenche l'envoi de la facture lors du passage en "Expédié/Retiré"
      */
     #[Route('/{id}/status', name: 'api_order_update_status', methods: ['PATCH', 'PUT'])]
     public function updateStatus(Order $order, Request $request, EntityManagerInterface $em): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
         $newStatus = $data['status'] ?? null;
+        
+        // On mémorise l'ancien statut avant modification
+        $oldStatus = $order->getStatus();
 
         $allowedStatuses = ['created', 'paid', 'shipped', 'completed', 'cancelled'];
         if (!$newStatus || !in_array($newStatus, $allowedStatuses)) {
@@ -214,29 +218,21 @@ class OrderController extends AbstractController
         }
 
         // --- LOGIQUE ENCAISSEMENT BOUTIQUE & NETTOYAGE DES DOUBLONS ---
-        // Si la commande passe en "Retirée" (shipped) et que c'est un retrait boutique (pickup)
         if ($newStatus === 'shipped' && $order->getShippingMethod() === 'pickup' && $order->getStatus() === 'created') {
-
-            // 1. On cherche les paiements existants pour cette commande (ex: la tentative Stripe abandonnée)
+            
             $existingPayments = $em->getRepository(Payment::class)->findBy(['order' => $order]);
-
             foreach ($existingPayments as $p) {
                 if ($p->getStatus() === 'pending') {
-                    // Option A: On marque comme annulé pour l'historique
                     $p->setStatus('cancelled');
                     $p->setUpdatedAt(new \DateTimeImmutable());
-
-                    // Option B (Décommenter si vous préférez supprimer physiquement la ligne) :
-                    // $em->remove($p);
                 }
             }
 
-            // 2. On crée le nouveau paiement "Boutique" validé
             $payment = new Payment();
             $payment->setOrder($order);
             $payment->setMethod('boutique');
             $payment->setAmount($order->getTotal());
-            $payment->setStatus('success'); // On valide l'encaissement immédiat au comptoir
+            $payment->setStatus('success');
             $payment->setTransactionId('CASH-' . $order->getId() . '-' . time());
             $payment->setUpdatedAt(new \DateTimeImmutable());
 
@@ -248,6 +244,21 @@ class OrderController extends AbstractController
         $order->setUpdatedAt(new \DateTimeImmutable());
 
         $em->flush();
+
+        // --- ENVOI DE LA FACTURE PAR EMAIL ---
+        // On envoie la facture uniquement si on passe au statut 'shipped' 
+        // et que ce n'était pas déjà le cas (évite les doublons si on réenregistre)
+        if ($newStatus === 'shipped' && $oldStatus !== 'shipped') {
+            try {
+                // On force le rechargement pour que la facture ait les infos de paiement à jour
+                $em->refresh($order); 
+                
+                $this->emailService->sendInvoiceNotification($order);
+            } catch (\Exception $e) {
+                // On log l'erreur pour ne pas bloquer la réponse API si le mail échoue
+                error_log("Erreur envoi facture commande #" . $order->getId() . " : " . $e->getMessage());
+            }
+        }
 
         return $this->json([
             'success' => true,

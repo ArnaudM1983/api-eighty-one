@@ -1,0 +1,95 @@
+{# templates/emails/order_invoice.html.twig #}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: 'Helvetica', Arial, sans-serif; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; }
+        .header { display: table; width: 100%; border-bottom: 2px solid #000; padding-bottom: 20px; }
+        .col { display: table-cell; vertical-align: top; }
+        .table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        .table th { background: #f4f4f4; padding: 10px; text-align: left; font-size: 12px; }
+        .table td { padding: 10px; border-bottom: 1px solid #eee; font-size: 13px; }
+        .totals { float: right; width: 250px; margin-top: 20px; }
+        .totals div { display: flex; justify-content: space-between; padding: 5px 0; }
+        .footer { margin-top: 50px; text-align: center; font-size: 10px; color: #999; border-top: 1px solid #eee; padding-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="col">
+                <h2 style="margin:0;">FACTURE</h2>
+                <p style="font-size: 12px; color: #666;">N° : INV-{{ order.id }}<br>Date : {{ "now"|date("d/m/Y") }}</p>
+            </div>
+            <div class="col" style="text-align: right; font-size: 12px;">
+                <strong>Eighty One Store</strong><br>
+                21 rue des Capucins<br>
+                69001 Lyon, France
+            </div>
+        </div>
+
+        <div style="margin-top: 30px; font-size: 13px;">
+            <strong>Destinataire :</strong><br>
+            {{ order.shippingInfo.firstName }} {{ order.shippingInfo.lastName }}<br>
+            {{ order.shippingInfo.address }}<br>
+            {{ order.shippingInfo.phone }}<br>
+            {{ order.shippingInfo.postalCode }} {{ order.shippingInfo.city }}
+        </div>
+
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Description</th>
+                    <th style="text-align: center;">Qté</th>
+                    <th style="text-align: right;">Total TTC</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in order.items %}
+                    <tr>
+                        <td>
+                            {{ item.product.name }}
+                            {% if item.variant %}<br><small style="color:#777">{{ item.variant.name }}</small>{% endif %}
+                        </td>
+                        <td style="text-align: center;">{{ item.quantity }}</td>
+                        <td style="text-align: right;">{{ item.totalPrice|number_format(2, ',', ' ') }} €</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="totals">
+            <div>
+                <span>Total HT :</span>
+                <span>{{ (order.total / 1.2)|number_format(2, ',', ' ') }} €</span>
+            </div>
+            <div>
+                <span>TVA (20%) :</span>
+                <span>{{ totalTax|number_format(2, ',', ' ') }} €</span>
+            </div>
+            {% if order.shippingCost > 0 %}
+            <div>
+                <span>Frais de port :</span>
+                <span>{{ order.shippingCost|number_format(2, ',', ' ') }} €</span>
+            </div>
+            {% endif %}
+            <div style="font-size: 18px; font-weight: bold; border-top: 1px solid #000; margin-top: 10px; padding-top: 10px;">
+                <span>TOTAL TTC :</span>
+                <span>{{ order.total|number_format(2, ',', ' ') }} €</span>
+            </div>
+        </div>
+
+        <div style="clear: both; margin-top: 40px; font-size: 12px;">
+            <p><strong>Mode de paiement :</strong> {{ order.shippingMethod == 'pickup' ? 'Paiement en boutique' : 'Carte Bancaire (Stripe)' }}</p>
+            <p><strong>Mode de livraison :</strong> {{ order.shippingMethod == 'pickup' ? 'Retrait sur place' : order.shippingMethod }}</p>
+        </div>
+
+        <div class="footer">
+            Eighty One Store - SARL au capital de XXX € - RCS Lyon XXX XXX XXX<br>
+            TVA Intracommunautaire : FRXXXXXXXXX
+        </div>
+    </div>
+</body>
+</html>

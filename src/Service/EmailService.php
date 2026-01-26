@@ -40,7 +40,7 @@ class EmailService
     }
 
     /**
-     * Mail envoyé à l'ADMIN (vous)
+     * Mail envoyé à l'ADMIN 
      */
     public function sendAdminNotification(Order $order): void
     {
@@ -54,7 +54,7 @@ class EmailService
         }
         $email = (new TemplatedEmail())
             ->from(new Address(self::STORE_EMAIL, 'Eighty One System'))
-            ->to(self::STORE_TEST) // C'est ici que vous recevez le mail
+            ->to(self::STORE_TEST) // Adresse de reception du mail
             ->subject('🚀 Nouvelle commande à préparer : #' . $order->getId())
             ->htmlTemplate('emails/admin_order_notification.html.twig')
             ->context([
@@ -102,6 +102,29 @@ class EmailService
             ->subject('Confirmation de votre commande en retrait boutique - #' . $order->getId())
             ->htmlTemplate('emails/order_pickup_confirmation.html.twig')
             ->context(['order' => $order]);
+
+        $this->mailer->send($email);
+    }
+
+    /**
+     * Mail envoyé au CLIENT avec le récapitulatif/facture 
+     * déclenché lors de l'expédition ou du retrait
+     */
+    public function sendInvoiceNotification(Order $order): void
+    {
+        $shippingInfo = $order->getShippingInfo();
+        if (!$shippingInfo || !$shippingInfo->getEmail()) return;
+
+        $email = (new TemplatedEmail())
+            ->from(new Address(self::STORE_EMAIL, self::STORE_NAME))
+            ->to(new Address($shippingInfo->getEmail(), $shippingInfo->getFirstName()))
+            ->subject('Votre facture Eighty One Store - Commande #' . $order->getId())
+            ->htmlTemplate('emails/order_invoice.html.twig') 
+            ->context([
+                'order' => $order,
+                // Calcul de la TVA pour le template (20% incluse)
+                'totalTax' => (float)$order->getTotal() - ((float)$order->getTotal() / 1.2)
+            ]);
 
         $this->mailer->send($email);
     }
