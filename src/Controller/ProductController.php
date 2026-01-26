@@ -174,7 +174,14 @@ class ProductController extends AbstractController
         if (isset($data['description'])) $product->setDescription($data['description']);
         if (isset($data['excerpt'])) $product->setExcerpt($data['excerpt']);
         if (isset($data['sku'])) $product->setSku($data['sku']);
-        if (isset($data['price'])) $product->setPrice($data['price']);
+        if (isset($data['price'])) {
+            $newPrice = $data['price'];
+            $product->setPrice($newPrice);
+            // SYNCHRONISATION DES VARIANTES
+            foreach ($product->getVariants() as $variant) {
+                $variant->setPrice($newPrice);
+            }
+        }
         if (isset($data['stock'])) $product->setStock($data['stock']);
         if (isset($data['featured'])) $product->setFeatured($data['featured']);
         if (isset($data['main_image'])) $product->setMainImage($data['main_image']);
