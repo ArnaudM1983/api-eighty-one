@@ -33,24 +33,55 @@ class OrderController extends AbstractController
     ) {}
 
     /**
-     * CRUD: List all orders (Dashboard Admin)
+     * CRUD: List all orders avec Pagination & Filtres
      */
     #[Route('', name: 'api_order_list', methods: ['GET'])]
-    public function listOrders(OrderRepository $repo): JsonResponse
+    public function listOrders(OrderRepository $repo, Request $request): JsonResponse
     {
-        $orders = $repo->findBy([], ['createdAt' => 'DESC']);
+        $qb = $repo->createQueryBuilder('o')
+            ->orderBy('o.createdAt', 'DESC');
 
+        // 1. FILTRE : Recherche (Client ou ID)
+        if ($q = $request->query->get('q')) {
+            // On cherche dans les infos de shipping jointes
+            $qb->leftJoin('o.shippingInfo', 's')
+               ->andWhere('
+                   o.id LIKE :q OR 
+                   s.firstName LIKE :q OR 
+                   s.lastName LIKE :q OR
+                   s.email LIKE :q
+               ')
+               ->setParameter('q', '%' . $q . '%');
+        }
+
+        // 2. FILTRE : Statut
+        if ($status = $request->query->get('status')) {
+            $qb->andWhere('o.status = :status')
+               ->setParameter('status', $status);
+        }
+
+        // 3. PAGINATION
+        // On clone pour compter le total avant d'appliquer la limite
+        $countQb = clone $qb;
+        $total = $countQb->select('count(o.id)')->getQuery()->getSingleScalarResult();
+
+        $page = (int) $request->query->get('_page', 1);
+        $limit = (int) $request->query->get('_limit', 20);
+        $offset = ($page - 1) * $limit;
+
+        $orders = $qb
+            ->setFirstResult($offset)
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
+
+        // 4. MAPPING DES DONNÉES
         $data = array_map(function (Order $o) {
             $shipping = $o->getShippingInfo();
             return [
                 'id' => $o->getId(),
                 'customer' => $shipping ? ($shipping->getFirstName() . ' ' . $shipping->getLastName()) : 'Anonyme',
                 'email' => $shipping ? $shipping->getEmail() : 'N/A',
-                'shippingInfo' => [
-                    'address' => $shipping?->getAddress(),
-                    'city' => $shipping?->getCity(),
-                    'postalCode' => $shipping?->getPostalCode(),
-                ],
                 'total' => $o->getTotal(),
                 'status' => $o->getStatus(),
                 'createdAt' => $o->getCreatedAt()->format('d/m/Y H:i'),
@@ -58,7 +89,11 @@ class OrderController extends AbstractController
             ];
         }, $orders);
 
-        return $this->json($data);
+        // On renvoie le total dans le header pour Refine
+        return $this->json($data, 200, [
+            'x-total-count' => $total,
+            'Access-Control-Expose-Headers' => 'x-total-count'
+        ]);
     }
 
     /**
