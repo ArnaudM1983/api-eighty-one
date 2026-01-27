@@ -111,15 +111,25 @@ class StripeController extends AbstractController
                 $order->setStatus('paid');
                 $em->flush();
 
+                // On vérifie le mode de livraison pour envoyer le bon template
                 if ($order->getShippingMethod() === 'pickup') {
-                    // Envoi du mail spécifique Pickup
+                    // Cas 1 : Retrait boutique payé en ligne
+                    // Ton template gère déjà le cas "paid" avec la div verte ✅
                     $emailService->sendPickupConfirmation($order);
                 } else {
-                    // Envoi du mail de confirmation standard (Livraison)
+                    // Cas 2 : Livraison Domicile / Point Relais
                     $emailService->sendOrderConfirmation($order);
                 }
 
-                $emailService->sendAdminNotification($order);
+                // Notification Admin (Tu peux laisser la notif standard ou mettre la spécifique pickup si tu préfères)
+                if ($order->getShippingMethod() === 'pickup') {
+                     // Optionnel : si tu veux le mail "Action requise" même si c'est payé (pour préparer le sac)
+                     // $emailService->sendAdminPickupNotification($order); 
+                     // OU garder le standard :
+                     $emailService->sendAdminNotification($order);
+                } else {
+                     $emailService->sendAdminNotification($order);
+                }
             }
         }
 

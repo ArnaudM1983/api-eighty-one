@@ -128,4 +128,30 @@ class EmailService
 
         $this->mailer->send($email);
     }
+
+    /**
+     * Mail Admin spécifique pour le "Click & Collect" avec paiement sur place
+     * Réutilise le template admin existant qui gère déjà l'affichage "À PAYER"
+     */
+    public function sendAdminPickupNotification(Order $order): void
+    {
+        // On force le chargement des données (comme dans ta méthode standard)
+        foreach ($order->getItems() as $item) {
+            $item->getProduct()->getName(); 
+            if ($item->getVariant()) {
+                $item->getVariant()->getName();
+            }
+        }
+
+        $email = (new TemplatedEmail())
+            ->from(new Address(self::STORE_EMAIL, 'Eighty One System'))
+            ->to(self::STORE_TEST) 
+            ->subject('⚠️ Action requise : Retrait Boutique à encaisser #' . $order->getId()) // Objet différent pour attirer l'attention
+            ->htmlTemplate('emails/admin_order_notification.html.twig') // On réutilise ton super template
+            ->context([
+                'order' => $order,
+            ]);
+
+        $this->mailer->send($email);
+    }
 }
