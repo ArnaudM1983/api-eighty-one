@@ -17,6 +17,7 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Annotation\Route;
+use App\Service\StockService;
 
 #[Route('/api/order')]
 class OrderController extends AbstractController
@@ -189,7 +190,7 @@ class OrderController extends AbstractController
      * Déclenche l'envoi de la facture lors du passage en "Expédié/Retiré"
      */
     #[Route('/{id}/status', name: 'api_order_update_status', methods: ['PATCH', 'PUT'])]
-    public function updateStatus(Order $order, Request $request, EntityManagerInterface $em): JsonResponse
+    public function updateStatus(Order $order, Request $request, EntityManagerInterface $em, StockService $stockService): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
         $newStatus = $data['status'] ?? null;
@@ -223,6 +224,24 @@ class OrderController extends AbstractController
 
             $em->persist($payment);
         }
+
+        // GESTION DU RESTOCKAGE SI ANNULATION
+        // Si on passe à 'cancelled' ET que l'ancien statut avait déjà décrémenté le stock
+        // (c'est-à-dire si ce n'était pas une simple commande 'created' abandonnée sans validation pickup)
+
+        // Simplification : Si l'ancien statut était 'paid', 'shipped', 'completed' 
+        // OU si c'était un pickup validé (si tu as mis un statut 'pending_payment' ou si tu te bases sur le fait que le stock a été touché).
+
+        // Note : Pour être sûr à 100%, l'idéal est d'avoir un booléen "stockDecremented" sur l'entité Order.
+        // Mais sinon, on peut assumer :
+        if ($newStatus === 'cancelled' && in_array($oldStatus, ['paid', 'shipped', 'completed', 'pending_payment'])) {
+            $stockService->incrementStock($order);
+        }
+
+        // Cas spécifique Pickup resté en 'created' mais stock décrémenté via confirmPickup :
+        // Si tu n'as pas changé le statut dans confirmPickup, c'est dur de savoir.
+        // CONSEIL : Dans confirmPickup, passe le statut à 'pending_payment' ou 'confirmed_pickup'.
+        // Cela rendra la logique d'annulation beaucoup plus simple ici.
 
         // 3. Mise à jour du statut de la commande
         $order->setStatus($newStatus);
@@ -300,7 +319,7 @@ class OrderController extends AbstractController
      * Cette route est appelée par le Front quand l'utilisateur clique sur "Valider"
      */
     #[Route('/{id}/confirm-pickup', name: 'api_order_confirm_pickup', methods: ['POST'])]
-    public function confirmPickup(Order $order, EntityManagerInterface $em, EmailService $emailService): JsonResponse
+    public function confirmPickup(Order $order, EntityManagerInterface $em, EmailService $emailService, StockService $stockService): JsonResponse
     {
         // 1. Vérifications de sécurité
         if ($order->getShippingMethod() !== 'pickup') {
@@ -309,24 +328,12 @@ class OrderController extends AbstractController
 
         // Si la commande est déjà payée ou expédiée, on ne fait rien
         if (in_array($order->getStatus(), ['paid', 'shipped', 'completed'])) {
-             return $this->json(['message' => 'Commande déjà validée'], 200);
+            return $this->json(['message' => 'Commande déjà validée'], 200);
         }
 
-        // 2. On vérifie si un email a déjà été envoyé pour éviter le spam
-        // Astuce : On peut utiliser un champ booléen "isConfirmed" sur l'Order, 
-        // ou vérifier s'il existe une "fausse" transaction, 
-        // ou simplement vérifier si le statut est toujours strictement à 'created'.
-        
-        // OPTION RECOMMANDÉE : Changer légèrement le statut pour dire "Validée par le client"
-        // Si tu veux garder 'created' pour le paiement boutique, assure-toi que ton Front
-        // ne rappelle pas cette route plusieurs fois.
-        
-        // Pour sécuriser côté Back, je suggère de passer le statut à "pending_payment" 
-        // (En attente de paiement boutique). Cela permet de la distinguer d'un panier abandonné.
-        // Si tu tiens ABSOLUMENT à "created", saute la ligne suivante.
-        
-        // $order->setStatus('pending_payment'); // Suggéré
-        
+        // Décrémente le stock
+        $stockService->decrementStock($order);
+
         // 3. Envoi de l'email
         try {
             // Mail au Client

@@ -14,6 +14,7 @@ use Symfony\Component\Routing\Annotation\Route;
 use Stripe\Webhook;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\Request;
+use App\Service\StockService;
 
 #[Route('/api/payment')]
 class StripeController extends AbstractController
@@ -81,7 +82,7 @@ class StripeController extends AbstractController
     }
 
     #[Route('/stripe/webhook', name: 'api_stripe_webhook', methods: ['POST'])]
-    public function handleWebhook(Request $request, EntityManagerInterface $em, EmailService $emailService): Response
+    public function handleWebhook(Request $request, EntityManagerInterface $em, EmailService $emailService, StockService $stockService): Response
     {
         $payload = $request->getContent();
         $sigHeader = $request->headers->get('Stripe-Signature');
@@ -100,7 +101,7 @@ class StripeController extends AbstractController
         if ($event->type === 'payment_intent.succeeded') {
             $paymentIntent = $event->data->object; // L'objet PaymentIntent de Stripe
 
-            // Retrouver le paiement dans votre base de données via l'ID Stripe (pi_...)
+            // Retrouver le paiement dans en base de données
             $payment = $em->getRepository(Payment::class)->findOneBy([
                 'transactionId' => $paymentIntent->id
             ]);
@@ -111,24 +112,23 @@ class StripeController extends AbstractController
                 $order->setStatus('paid');
                 $em->flush();
 
+                // Décrémente le stock
+                $stockService->decrementStock($order);
+
                 // On vérifie le mode de livraison pour envoyer le bon template
                 if ($order->getShippingMethod() === 'pickup') {
                     // Cas 1 : Retrait boutique payé en ligne
-                    // Ton template gère déjà le cas "paid" avec la div verte ✅
                     $emailService->sendPickupConfirmation($order);
                 } else {
                     // Cas 2 : Livraison Domicile / Point Relais
                     $emailService->sendOrderConfirmation($order);
                 }
 
-                // Notification Admin (Tu peux laisser la notif standard ou mettre la spécifique pickup si tu préfères)
+                // Notification Admin 
                 if ($order->getShippingMethod() === 'pickup') {
-                     // Optionnel : si tu veux le mail "Action requise" même si c'est payé (pour préparer le sac)
-                     // $emailService->sendAdminPickupNotification($order); 
-                     // OU garder le standard :
-                     $emailService->sendAdminNotification($order);
+                    $emailService->sendAdminNotification($order);
                 } else {
-                     $emailService->sendAdminNotification($order);
+                    $emailService->sendAdminNotification($order);
                 }
             }
         }
