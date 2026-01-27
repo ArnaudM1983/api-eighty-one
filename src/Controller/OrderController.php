@@ -18,6 +18,8 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Annotation\Route;
 use App\Service\StockService;
+use Stripe\Stripe;            
+use Stripe\Refund;
 
 #[Route('/api/order')]
 class OrderController extends AbstractController
@@ -187,15 +189,18 @@ class OrderController extends AbstractController
 
     /**
      * API: Update Status (Dashboard Admin)
-     * Déclenche l'envoi de la facture lors du passage en "Expédié/Retiré"
+     * Gère : Changement de statut, Paiement comptoir, Remboursement Stripe, Restockage, Envoi Facture.
      */
     #[Route('/{id}/status', name: 'api_order_update_status', methods: ['PATCH', 'PUT'])]
-    public function updateStatus(Order $order, Request $request, EntityManagerInterface $em, StockService $stockService): JsonResponse
+    public function updateStatus(
+        Order $order, 
+        Request $request, 
+        EntityManagerInterface $em, 
+        StockService $stockService 
+    ): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
         $newStatus = $data['status'] ?? null;
-
-        // On mémorise l'ancien statut avant modification
         $oldStatus = $order->getStatus();
 
         $allowedStatuses = ['created', 'paid', 'shipped', 'completed', 'cancelled'];
@@ -203,9 +208,60 @@ class OrderController extends AbstractController
             return $this->json(['error' => 'Statut invalide'], 400);
         }
 
-        // --- LOGIQUE ENCAISSEMENT BOUTIQUE & NETTOYAGE DES DOUBLONS ---
-        if ($newStatus === 'shipped' && $order->getShippingMethod() === 'pickup' && $order->getStatus() === 'created') {
+        // ==============================================================================
+        // 1. GESTION DE L'ANNULATION (Remboursement & Restockage)
+        // ==============================================================================
+        if ($newStatus === 'cancelled' && $oldStatus !== 'cancelled') {
+            
+            // A. RESTOCKAGE
+            // On remet le stock si la commande était validée (paid/shipped) 
+            // OU si c'était un retrait boutique (même en 'created', car le stock est décrémenté à la réservation)
+            $wasReserved = in_array($oldStatus, ['paid', 'shipped', 'completed']) 
+                           || ($oldStatus === 'created' && $order->getShippingMethod() === 'pickup');
 
+            if ($wasReserved) {
+                $stockService->incrementStock($order);
+            }
+
+            // B. REMBOURSEMENT STRIPE
+            // On cherche s'il y a un paiement Stripe validé
+            $stripePayment = $em->getRepository(Payment::class)->findOneBy([
+                'order' => $order, 
+                'method' => 'stripe',
+                'status' => 'success'
+            ]);
+
+            if ($stripePayment) {
+                try {
+                    // On initialise Stripe avec la clé secrète
+                    Stripe::setApiKey($this->getParameter('stripe_secret_key'));
+                    
+                    // On lance le remboursement total
+                    $refund = Refund::create([
+                        'payment_intent' => $stripePayment->getTransactionId(),
+                        'reason' => 'requested_by_customer', // Raison: demande client
+                    ]);
+
+                    // On met à jour le statut du paiement en BDD local
+                    $stripePayment->setStatus('refunded');
+                    $stripePayment->setUpdatedAt(new \DateTimeImmutable());
+
+                } catch (\Exception $e) {
+                    // Si le remboursement échoue (ex: trop tard, clé invalide), on bloque et on avertit l'admin
+                    return $this->json([
+                        'error' => 'Erreur critique lors du remboursement Stripe : ' . $e->getMessage()
+                    ], 500);
+                }
+            }
+        }
+
+        // ==============================================================================
+        // 2. LOGIQUE PAIEMENT BOUTIQUE (Validation au comptoir)
+        // ==============================================================================
+        // Si on passe à "Expédié/Retiré" pour un Pickup qui était encore en "Created" (donc non payé en ligne)
+        if ($newStatus === 'shipped' && $newStatus !== 'cancelled' && $order->getShippingMethod() === 'pickup' && $oldStatus === 'created') {
+
+            // On annule les éventuelles tentatives de paiement Stripe échouées/en attente
             $existingPayments = $em->getRepository(Payment::class)->findBy(['order' => $order]);
             foreach ($existingPayments as $p) {
                 if ($p->getStatus() === 'pending') {
@@ -214,59 +270,48 @@ class OrderController extends AbstractController
                 }
             }
 
+            // On crée le paiement "Cash/Boutique"
             $payment = new Payment();
             $payment->setOrder($order);
-            $payment->setMethod('boutique');
+            $payment->setMethod('boutique'); // Méthode spécifique
             $payment->setAmount($order->getTotal());
             $payment->setStatus('success');
+            // On génère un ID de transaction fictif pour la traçabilité
             $payment->setTransactionId('CASH-' . $order->getId() . '-' . time());
             $payment->setUpdatedAt(new \DateTimeImmutable());
 
             $em->persist($payment);
         }
 
-        // GESTION DU RESTOCKAGE SI ANNULATION
-        // Si on passe à 'cancelled' ET que l'ancien statut avait déjà décrémenté le stock
-        // (c'est-à-dire si ce n'était pas une simple commande 'created' abandonnée sans validation pickup)
-
-        // Simplification : Si l'ancien statut était 'paid', 'shipped', 'completed' 
-        // OU si c'était un pickup validé (si tu as mis un statut 'pending_payment' ou si tu te bases sur le fait que le stock a été touché).
-
-        // Note : Pour être sûr à 100%, l'idéal est d'avoir un booléen "stockDecremented" sur l'entité Order.
-        // Mais sinon, on peut assumer :
-        if ($newStatus === 'cancelled' && in_array($oldStatus, ['paid', 'shipped', 'completed', 'pending_payment'])) {
-            $stockService->incrementStock($order);
-        }
-
-        // Cas spécifique Pickup resté en 'created' mais stock décrémenté via confirmPickup :
-        // Si tu n'as pas changé le statut dans confirmPickup, c'est dur de savoir.
-        // CONSEIL : Dans confirmPickup, passe le statut à 'pending_payment' ou 'confirmed_pickup'.
-        // Cela rendra la logique d'annulation beaucoup plus simple ici.
-
-        // 3. Mise à jour du statut de la commande
+        // ==============================================================================
+        // 3. MISE À JOUR FINALE ET SAUVEGARDE
+        // ==============================================================================
         $order->setStatus($newStatus);
         $order->setUpdatedAt(new \DateTimeImmutable());
 
         $em->flush();
 
-        // --- ENVOI DE LA FACTURE PAR EMAIL ---
-        // On envoie la facture uniquement si on passe au statut 'shipped' 
-        // et que ce n'était pas déjà le cas (évite les doublons si on réenregistre)
+        // ==============================================================================
+        // 4. ENVOI DE LA FACTURE PAR EMAIL
+        // ==============================================================================
+        // On envoie la facture uniquement au passage à 'shipped' (si pas déjà fait)
         if ($newStatus === 'shipped' && $oldStatus !== 'shipped') {
             try {
-                // On force le rechargement pour que la facture ait les infos de paiement à jour
+                // On force le rafraîchissement pour que la facture inclue le nouveau paiement (si Boutique)
                 $em->refresh($order);
 
                 $this->emailService->sendInvoiceNotification($order);
             } catch (\Exception $e) {
-                // On log l'erreur pour ne pas bloquer la réponse API si le mail échoue
                 error_log("Erreur envoi facture commande #" . $order->getId() . " : " . $e->getMessage());
             }
         }
 
         return $this->json([
             'success' => true,
-            'newStatus' => $order->getStatus()
+            'newStatus' => $order->getStatus(),
+            'message' => $newStatus === 'cancelled' 
+                ? 'Commande annulée. Stock rétabli et remboursement effectué (si éligible).' 
+                : 'Statut mis à jour avec succès.'
         ]);
     }
 
