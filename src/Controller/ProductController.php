@@ -12,6 +12,7 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Annotation\Route;
+use Doctrine\ORM\Tools\Pagination\Paginator;
 
 #[Route('/api/products')]
 class ProductController extends AbstractController
@@ -26,20 +27,59 @@ class ProductController extends AbstractController
     }
 
     /**
-     * CRUD: Read (List)
-     * HTTP Method: GET
+     * CRUD: Read (List) avec Pagination & Recherche (CORRIGÉ POUR LES JOIN)
      * URL: /api/products
      **/
     #[Route('', methods: ['GET'])]
-    public function getAll(): JsonResponse
+    public function getAll(Request $request): JsonResponse
     {
-        // On récupère TOUS les produits sans limite
-        $products = $this->repo->findBy([], ['id' => 'DESC']);
-        $total = count($products);
+        $qb = $this->repo->createQueryBuilder('p')
+            ->leftJoin('p.variants', 'v')
+            ->addSelect('v'); 
 
-        $data = array_map(fn(Product $p) => $this->serializeProduct($p), $products);
+        // 1. RECHERCHE
+        if ($q = $request->query->get('q')) {
+            $keywords = array_filter(explode(' ', $q));
 
-        return $this->json($data, 200, [
+            foreach ($keywords as $index => $word) {
+                // On crée un paramètre unique pour chaque mot (:q0, :q1...)
+                $parameterName = 'q' . $index;
+                
+                $qb->andWhere('
+                    p.name LIKE :'.$parameterName.' OR 
+                    p.sku LIKE :'.$parameterName.' OR 
+                    v.name LIKE :'.$parameterName.' OR 
+                    v.sku LIKE :'.$parameterName.'
+                ')
+                ->setParameter($parameterName, '%' . $word . '%');
+            }
+        }
+
+        // 2. CONFIGURATION DE LA PAGINATION
+        $page = (int) $request->query->get('_page', 1);
+        $limit = (int) $request->query->get('_limit', 20);
+        $offset = ($page - 1) * $limit;
+
+        // Tri par ID décroissant (Les plus récents en premier)
+        // Si vous voulez voir les IDs 1, 2, 3 en premier, changez 'DESC' par 'ASC'
+        $qb->orderBy('p.id', 'DESC')
+           ->setFirstResult($offset)
+           ->setMaxResults($limit);
+
+        // 3. UTILISATION DU PAGINATOR (C'est ici que la magie opère)
+        // Le deuxième argument 'true' est important pour les fetch join
+        $paginator = new Paginator($qb, true);
+
+        // Récupération du nombre total réel de produits (et non de lignes SQL)
+        $total = count($paginator);
+
+        // Transformation des résultats
+        $products = [];
+        foreach ($paginator as $product) {
+            $products[] = $this->serializeProduct($product);
+        }
+
+        return $this->json($products, 200, [
             'x-total-count' => (string)$total,
             'Access-Control-Expose-Headers' => 'x-total-count'
         ]);
