@@ -181,21 +181,6 @@ class OrderController extends AbstractController
         $this->em->persist($shippingInfo);
         $this->em->flush(); // On sauve en BDD avant d'envoyer le mail
 
-        // --- ENVOI DU MAIL ---
-        if ($method === 'pickup') {
-            // On force Doctrine à bien voir le lien entre Order et ShippingInfo
-            $order->setShippingInfo($shippingInfo);
-
-            try {
-                // On envoie les mails
-                $this->emailService->sendPickupConfirmation($order);
-                $this->emailService->sendAdminNotification($order);
-            } catch (\Exception $e) {
-                // IMPORTANT: Logguez l'erreur pour savoir SI ça plante et POURQUOI
-                error_log("MAIL ERROR: " . $e->getMessage());
-            }
-        }
-
         return $this->json(['success' => true]);
     }
 
@@ -208,7 +193,7 @@ class OrderController extends AbstractController
     {
         $data = json_decode($request->getContent(), true);
         $newStatus = $data['status'] ?? null;
-        
+
         // On mémorise l'ancien statut avant modification
         $oldStatus = $order->getStatus();
 
@@ -219,7 +204,7 @@ class OrderController extends AbstractController
 
         // --- LOGIQUE ENCAISSEMENT BOUTIQUE & NETTOYAGE DES DOUBLONS ---
         if ($newStatus === 'shipped' && $order->getShippingMethod() === 'pickup' && $order->getStatus() === 'created') {
-            
+
             $existingPayments = $em->getRepository(Payment::class)->findBy(['order' => $order]);
             foreach ($existingPayments as $p) {
                 if ($p->getStatus() === 'pending') {
@@ -251,8 +236,8 @@ class OrderController extends AbstractController
         if ($newStatus === 'shipped' && $oldStatus !== 'shipped') {
             try {
                 // On force le rechargement pour que la facture ait les infos de paiement à jour
-                $em->refresh($order); 
-                
+                $em->refresh($order);
+
                 $this->emailService->sendInvoiceNotification($order);
             } catch (\Exception $e) {
                 // On log l'erreur pour ne pas bloquer la réponse API si le mail échoue
@@ -307,6 +292,59 @@ class OrderController extends AbstractController
             'orderId' => $order->getId(),
             'subTotal' => $order->getSubTotal(),
             'total' => $order->getTotal(),
+        ]);
+    }
+
+    /**
+     * API: Confirmer une commande en retrait boutique (Paiement sur place)
+     * Cette route est appelée par le Front quand l'utilisateur clique sur "Valider"
+     */
+    #[Route('/{id}/confirm-pickup', name: 'api_order_confirm_pickup', methods: ['POST'])]
+    public function confirmPickup(Order $order, EntityManagerInterface $em, EmailService $emailService): JsonResponse
+    {
+        // 1. Vérifications de sécurité
+        if ($order->getShippingMethod() !== 'pickup') {
+            return $this->json(['error' => 'Cette commande n\'est pas configurée pour un retrait boutique'], 400);
+        }
+
+        // Si la commande est déjà payée ou expédiée, on ne fait rien
+        if (in_array($order->getStatus(), ['paid', 'shipped', 'completed'])) {
+             return $this->json(['message' => 'Commande déjà validée'], 200);
+        }
+
+        // 2. On vérifie si un email a déjà été envoyé pour éviter le spam
+        // Astuce : On peut utiliser un champ booléen "isConfirmed" sur l'Order, 
+        // ou vérifier s'il existe une "fausse" transaction, 
+        // ou simplement vérifier si le statut est toujours strictement à 'created'.
+        
+        // OPTION RECOMMANDÉE : Changer légèrement le statut pour dire "Validée par le client"
+        // Si tu veux garder 'created' pour le paiement boutique, assure-toi que ton Front
+        // ne rappelle pas cette route plusieurs fois.
+        
+        // Pour sécuriser côté Back, je suggère de passer le statut à "pending_payment" 
+        // (En attente de paiement boutique). Cela permet de la distinguer d'un panier abandonné.
+        // Si tu tiens ABSOLUMENT à "created", saute la ligne suivante.
+        
+        // $order->setStatus('pending_payment'); // Suggéré
+        
+        // 3. Envoi de l'email
+        try {
+            // Mail au Client
+            $emailService->sendPickupConfirmation($order);
+            // Mail à l'admin
+            $emailService->sendAdminPickupNotification($order);
+        } catch (\Exception $e) {
+            // On log l'erreur mais on ne bloque pas la réponse client
+            error_log('Erreur envoi mail pickup: ' . $e->getMessage());
+        }
+
+        // 4. Sauvegarde (si changement de statut)
+        $em->flush();
+
+        return $this->json([
+            'success' => true,
+            'message' => 'Commande validée, email envoyé',
+            'orderId' => $order->getId()
         ]);
     }
 
