@@ -8,7 +8,8 @@ use Symfony\Component\Security\Core\User\UserInterface;
 use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
 
 #[ORM\Entity(repositoryClass: UserRepository::class)]
-class User
+// 👇 C'EST ICI QUE C'ÉTAIT MANQUANT 👇
+class User implements UserInterface, PasswordAuthenticatedUserInterface
 {
     #[ORM\Id]
     #[ORM\GeneratedValue]
@@ -35,15 +36,11 @@ class User
         return (string) $this->email;
     }
 
-    // Getters & Setters ...
-
-    // ID
     public function getId(): ?int
     {
         return $this->id;
     }
 
-    // Email
     public function getEmail(): ?string
     {
         return $this->email;
@@ -55,7 +52,6 @@ class User
         return $this;
     }
 
-    // Roles
     public function getRoles(): array
     {
         $roles = $this->roles;
@@ -72,7 +68,6 @@ class User
         return $this;
     }
 
-    // Password
     public function getPassword(): ?string
     {
         return $this->password;
@@ -84,7 +79,6 @@ class User
         return $this;
     }
 
-    // FirstName
     public function getFirstName(): ?string
     {
         return $this->firstName;
@@ -96,7 +90,6 @@ class User
         return $this;
     }
 
-    // LastName
     public function getLastName(): ?string
     {
         return $this->lastName;
@@ -108,9 +101,10 @@ class User
         return $this;
     }
 
-    // UserInterface / PasswordAuthenticatedUserInterface méthodes supplémentaires
-    public function eraseCredentials()
+    // J'ai ajouté ': void' ici pour respecter strictement l'interface
+    public function eraseCredentials(): void
     {
-        
+        // Si vous stockez des données sensibles temporaires sur l'utilisateur, effacez-les ici
+        // $this->plainPassword = null;
     }
 }
