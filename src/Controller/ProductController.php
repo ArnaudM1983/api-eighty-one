@@ -35,7 +35,13 @@ class ProductController extends AbstractController
     {
         $qb = $this->repo->createQueryBuilder('p')
             ->leftJoin('p.variants', 'v')
-            ->addSelect('v'); 
+            ->addSelect('v');
+
+        // Filtre pour les produits "featured" (Best Sellers)
+        if ($request->query->get('featured') === 'true') {
+            $qb->andWhere('p.featured = :featured')
+                ->setParameter('featured', true);
+        }
 
         // 1. RECHERCHE
         if ($q = $request->query->get('q')) {
@@ -44,14 +50,14 @@ class ProductController extends AbstractController
             foreach ($keywords as $index => $word) {
                 // On crée un paramètre unique pour chaque mot (:q0, :q1...)
                 $parameterName = 'q' . $index;
-                
+
                 $qb->andWhere('
-                    p.name LIKE :'.$parameterName.' OR 
-                    p.sku LIKE :'.$parameterName.' OR 
-                    v.name LIKE :'.$parameterName.' OR 
-                    v.sku LIKE :'.$parameterName.'
+                    p.name LIKE :' . $parameterName . ' OR 
+                    p.sku LIKE :' . $parameterName . ' OR 
+                    v.name LIKE :' . $parameterName . ' OR 
+                    v.sku LIKE :' . $parameterName . '
                 ')
-                ->setParameter($parameterName, '%' . $word . '%');
+                    ->setParameter($parameterName, '%' . $word . '%');
             }
         }
 
@@ -63,8 +69,8 @@ class ProductController extends AbstractController
         // Tri par ID décroissant (Les plus récents en premier)
         // Si vous voulez voir les IDs 1, 2, 3 en premier, changez 'DESC' par 'ASC'
         $qb->orderBy('p.id', 'DESC')
-           ->setFirstResult($offset)
-           ->setMaxResults($limit);
+            ->setFirstResult($offset)
+            ->setMaxResults($limit);
 
         // 3. UTILISATION DU PAGINATOR (C'est ici que la magie opère)
         // Le deuxième argument 'true' est important pour les fetch join
@@ -344,6 +350,32 @@ class ProductController extends AbstractController
         }
 
         return $this->json(['error' => 'Donnée de stock manquante'], 400);
+    }
+
+    /**
+     * Reorder products
+     * URL: /api/products/reorder
+     * Body: { "products": [ { "id": 12, "position": 1 }, { "id": 15, "position": 2 } ] }
+     */
+    #[Route('/reorder', methods: ['POST'])]
+    public function reorder(Request $request): JsonResponse
+    {
+        $data = json_decode($request->getContent(), true);
+
+        if (!isset($data['products']) || !is_array($data['products'])) {
+            return $this->json(['error' => 'Invalid data'], 400);
+        }
+
+        foreach ($data['products'] as $item) {
+            $product = $this->repo->find($item['id']);
+            if ($product) {
+                $product->setPosition((int) $item['position']);
+            }
+        }
+
+        $this->em->flush();
+
+        return $this->json(['message' => 'Order updated successfully']);
     }
 
     private function serializeProductWithoutVariants(Product $product): array

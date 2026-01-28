@@ -45,6 +45,9 @@ class Product
     #[ORM\Column(type: 'boolean')]
     private bool $featured = false;
 
+    #[ORM\Column(type: 'integer', options: ['default' => 0])]
+    private ?int $position = 0;
+
     #[ORM\Column(type: 'datetime')]
     private \DateTimeInterface $createdAt;
 
@@ -300,6 +303,18 @@ class Product
         if ($this->categories->removeElement($category)) {
             $category->removeProduct($this);
         }
+        return $this;
+    }
+
+    // Tri Produits
+    public function getPosition(): ?int
+    {
+        return $this->position;
+    }
+
+    public function setPosition(int $position): self
+    {
+        $this->position = $position;
         return $this;
     }
 }
