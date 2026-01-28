@@ -20,6 +20,7 @@ use Symfony\Component\Routing\Annotation\Route;
 use App\Service\StockService;
 use Stripe\Stripe;            
 use Stripe\Refund;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 #[Route('/api/order')]
 class OrderController extends AbstractController
@@ -36,6 +37,7 @@ class OrderController extends AbstractController
      * CRUD: List all orders avec Pagination & Filtres
      */
     #[Route('', name: 'api_order_list', methods: ['GET'])]
+    #[IsGranted('ROLE_ADMIN')]
     public function listOrders(OrderRepository $repo, Request $request): JsonResponse
     {
         $qb = $repo->createQueryBuilder('o')
@@ -227,6 +229,7 @@ class OrderController extends AbstractController
      * Gère : Changement de statut, Paiement comptoir, Remboursement Stripe, Restockage, Envoi Facture.
      */
     #[Route('/{id}/status', name: 'api_order_update_status', methods: ['PATCH', 'PUT'])]
+    #[IsGranted('ROLE_ADMIN')]
     public function updateStatus(
         Order $order, 
         Request $request, 

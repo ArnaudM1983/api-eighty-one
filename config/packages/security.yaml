@@ -2,6 +2,15 @@
 security:
     # ... (gardez vos password_hashers et providers)
 
+    providers:
+        app_user_provider:
+            entity:
+                class: App\Entity\User
+                property: email
+
+    password_hashers:
+        Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface: 'auto'
+
     firewalls:
         dev:
             pattern: ^/(_(profiler|wdt)|css|images|js)/
@@ -20,9 +29,16 @@ security:
         api:
             pattern: ^/api
             stateless: true
-            # jwt: ~  <-- COMMENTEZ OU SUPPRIMEZ CETTE LIGNE pour ne plus forcer le jeton
-
+            # 👇 C'EST ICI : IL FAUT L'ACTIVER ! 👇
+            jwt: ~
+            
     access_control:
-        # En mettant PUBLIC_ACCESS sur ^/api, TOUTES les routes commençant par /api 
-        # (produits, dashboard, stats, etc.) deviennent accessibles sans token.
-        - { path: ^/api, roles: PUBLIC_ACCESS }
+        # 1. Login
+        - { path: ^/api/login, roles: PUBLIC_ACCESS }
+
+        # 2. Protection "Écriture Catalogue" (Back-Office)
+        # Personne ne peut Créer/Modifier/Supprimer des produits sans être Admin
+        - { path: ^/api/(products|categories|variants), methods: [POST, PUT, PATCH, DELETE], roles: IS_AUTHENTICATED_FULLY }
+
+        # 3. Protection "Données Sensibles" (Clients, Stats)
+        - { path: ^/api/(users|stats), roles: IS_AUTHENTICATED_FULLY }
