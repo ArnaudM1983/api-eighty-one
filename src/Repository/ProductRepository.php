@@ -40,7 +40,10 @@ class ProductRepository extends ServiceEntityRepository
             ->join('p.categories', 'c')
             ->andWhere('c = :category')
             ->setParameter('category', $category)
-            ->orderBy('p.name', 'ASC')
+            // 1. On trie par la position définie dans le Back-Office (0, 1, 2...)
+            ->orderBy('p.position', 'ASC')
+            // 2. Si les positions sont identiques (ex: tout le monde à 0), on prend les plus récents
+            ->addOrderBy('p.id', 'DESC') 
             ->getQuery()
             ->getResult();
     }
