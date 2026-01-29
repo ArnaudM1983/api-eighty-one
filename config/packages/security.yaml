@@ -1,7 +1,5 @@
-# config/packages/security.yaml
 security:
-    # ... (gardez vos password_hashers et providers)
-
+    
     providers:
         app_user_provider:
             entity:
@@ -14,6 +12,11 @@ security:
     firewalls:
         dev:
             pattern: ^/(_(profiler|wdt)|css|images|js)/
+            security: false
+
+        # Route spécifique pour le Webhook (SANS JWT)
+        stripe_webhook:
+            pattern: ^/api/payment/stripe/webhook
             security: false
 
         login:
@@ -29,16 +32,17 @@ security:
         api:
             pattern: ^/api
             stateless: true
-            # 👇 C'EST ICI : IL FAUT L'ACTIVER ! 👇
             jwt: ~
             
     access_control:
-        # 1. Login
+        # Paiement stripe
+        - { path: ^/api/payment/stripe/webhook, roles: PUBLIC_ACCESS }
+        # Login
         - { path: ^/api/login, roles: PUBLIC_ACCESS }
 
-        # 2. Protection "Écriture Catalogue" (Back-Office)
+        # Protection "Écriture Catalogue" (Back-Office)
         # Personne ne peut Créer/Modifier/Supprimer des produits sans être Admin
         - { path: ^/api/(products|categories|variants), methods: [POST, PUT, PATCH, DELETE], roles: IS_AUTHENTICATED_FULLY }
 
-        # 3. Protection "Données Sensibles" (Clients, Stats)
+        # Protection "Données Sensibles" (Clients, Stats)
         - { path: ^/api/(users|stats), roles: IS_AUTHENTICATED_FULLY }

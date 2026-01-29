@@ -27,7 +27,7 @@ class ProductController extends AbstractController
     }
 
     /**
-     * CRUD: Read (List) avec Pagination & Recherche (CORRIGÉ POUR LES JOIN)
+     * CRUD: Read (List) avec Pagination & Recherche
      * URL: /api/products
      **/
     #[Route('', methods: ['GET'])]
@@ -43,7 +43,7 @@ class ProductController extends AbstractController
                 ->setParameter('featured', true);
         }
 
-        // 1. RECHERCHE
+        // RECHERCHE
         if ($q = $request->query->get('q')) {
             $keywords = array_filter(explode(' ', $q));
 
@@ -61,19 +61,17 @@ class ProductController extends AbstractController
             }
         }
 
-        // 2. CONFIGURATION DE LA PAGINATION
+        // CONFIGURATION DE LA PAGINATION
         $page = (int) $request->query->get('_page', 1);
         $limit = (int) $request->query->get('_limit', 20);
         $offset = ($page - 1) * $limit;
 
         // Tri par ID décroissant (Les plus récents en premier)
-        // Si vous voulez voir les IDs 1, 2, 3 en premier, changez 'DESC' par 'ASC'
         $qb->orderBy('p.id', 'DESC')
             ->setFirstResult($offset)
             ->setMaxResults($limit);
 
-        // 3. UTILISATION DU PAGINATOR (C'est ici que la magie opère)
-        // Le deuxième argument 'true' est important pour les fetch join
+        // UTILISATION DU PAGINATOR 
         $paginator = new Paginator($qb, true);
 
         // Récupération du nombre total réel de produits (et non de lignes SQL)
@@ -167,13 +165,6 @@ class ProductController extends AbstractController
         $product->setPrice($data['price'] ?? null);
         $product->setStock($data['stock'] ?? null);
         $product->setFeatured($data['featured'] ?? false);
-        // --------------------------------------------------
-        // TODO: Stockage local pour main_image
-        // Stockage des images sur le serveur local,
-        // remplacer le champ 'main_image' par un upload via FileType ou multipart/form-data,
-        // déplacer le fichier dans /public/uploads/products/ et stocker l'URL relative ici :
-        // $product->setMainImage('/uploads/products/'.$newFilename);
-        // --------------------------------------------------
         $product->setMainImage($data['main_image'] ?? null);
 
         // Categories
@@ -183,13 +174,6 @@ class ProductController extends AbstractController
         }
 
         // Images
-        // --------------------------------------------------
-        // TODO: Stockage local pour images supplémentaires
-        // Pour chaque image :
-        // 1. Recevoir un fichier via FileType / multipart/form-data
-        // 2. Déplacer le fichier dans /public/uploads/products/
-        // 3. Stocker l'URL relative dans $image->setUrl('/uploads/products/'.$newFilename)
-        // --------------------------------------------------
         foreach ($data['images'] ?? [] as $imgData) {
             $image = new ProductImage();
             $image->setUrl($imgData['url']);
@@ -234,12 +218,12 @@ class ProductController extends AbstractController
 
         // Update des catégories
         if (isset($data['category_ids'])) {
-            // 1. On vide les catégories actuelles liées au produit
+            // Vider les catégories actuelles liées au produit
             foreach ($product->getCategories() as $category) {
                 $product->removeCategory($category);
             }
 
-            // 2. On ajoute les nouvelles catégories sélectionnées
+            // Ajouter les nouvelles catégories sélectionnées
             foreach ($data['category_ids'] as $catId) {
                 $category = $this->em->getRepository(Category::class)->find($catId);
                 if ($category) {
@@ -253,17 +237,15 @@ class ProductController extends AbstractController
             // On récupère les images actuelles pour les comparer
             $currentImages = $product->getImages();
 
-            // 1. On supprime TOUTES les images actuelles via la méthode removeImage
-            // Cela garantit que Doctrine marque les entités pour suppression (DELETE)
+            // Suppression de toutes les images actuelles via la méthode removeImage
             foreach ($currentImages as $image) {
                 $product->removeImage($image);
             }
 
-            // 2. On ajoute les images reçues dans la requête
+            // Ajout des images reçues dans la requête
             foreach ($data['images'] as $imgData) {
                 if (!empty($imgData['url'])) {
                     $newImage = new ProductImage();
-                    // On s'assure de ne pas avoir de slash en trop au début
                     $url = ltrim($imgData['url'], '/');
                     $newImage->setUrl($url);
                     $newImage->setAlt($product->getName());
@@ -274,11 +256,8 @@ class ProductController extends AbstractController
 
         $product->setUpdatedAt(new \DateTimeImmutable());
 
-        // Le flush va maintenant exécuter les DELETE pour les orphelins 
-        // et les INSERT pour les nouvelles images
         $this->em->flush();
 
-        // Il est recommandé de renvoyer le produit sérialisé pour Refine
         return $this->json($this->serializeProduct($product));
     }
 
@@ -333,7 +312,7 @@ class ProductController extends AbstractController
     }
 
     /**
-     * Mettre à jour uniquement le stock (Produit principal)
+     * Update Stock (Main product)
      * URL: PATCH /api/products/{id}
      */
     #[Route('/{id}', methods: ['PATCH'])]
