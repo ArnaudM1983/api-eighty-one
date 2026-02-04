@@ -64,25 +64,44 @@ class ProductVariantController extends AbstractController
         $variant->setName($data['name'] ?? '');
         $variant->setSku($data['sku'] ?? null);
         
-        // Gestion du prix : On ne le set que s'il est envoyé 
-        // (Sinon le getter dynamique utilisera celui du parent)
-        if (!empty($data['price'])) {
-            $variant->setPrice($data['price']);
-        }
-        
+        // Stock, Image et Attributs (Pas d'héritage nécessaire)
         $variant->setStock(isset($data['stock']) ? (int)$data['stock'] : 0);
         $variant->setImage($data['image'] ?? null);
-        $variant->setAttributes($data['attributes'] ?? []);
+        
+        // Gestion propre des attributs (NULL si vide pour éviter [])
+        $attributes = $data['attributes'] ?? null;
+        $variant->setAttributes(!empty($attributes) ? $attributes : null);
 
-        // RÉCUPÉRATION DU PRODUIT PARENT (Clé 'product' ou 'product_id')
+        // RÉCUPÉRATION ET HÉRITAGE DU PARENT
         $pId = $data['product'] ?? $data['product_id'] ?? null;
 
         if ($pId) {
             $product = $this->em->getRepository(Product::class)->find($pId);
+            
             if (!$product) {
                 return $this->json(['error' => 'Produit parent introuvable'], 404);
             }
+            
             $variant->setProduct($product);
+
+            // --- 1. LOGIQUE PRIX (HÉRITAGE) ---
+            // Si le front envoie un prix, on l'utilise. Sinon, on prend celui du parent.
+            if (!empty($data['price'])) {
+                $variant->setPrice($data['price']);
+            } else {
+                $variant->setPrice($product->getPrice());
+            }
+
+            // --- 2. LOGIQUE POIDS (HÉRITAGE) ---
+            // Si le front envoie un poids non nul, on l'utilise. Sinon, on prend celui du parent.
+            // On utilise !empty pour éviter que "0" ou "" ne bloque l'héritage si nécessaire, 
+            // mais attention si le poids 0 est une valeur valide, il vaudrait mieux utiliser is_numeric check.
+            if (isset($data['weight']) && $data['weight'] !== '' && $data['weight'] !== null) {
+                $variant->setWeight((float)$data['weight']);
+            } else {
+                $variant->setWeight($product->getWeight());
+            }
+
         } else {
             return $this->json(['error' => 'L\'ID du produit parent est requis'], 400);
         }
@@ -90,7 +109,6 @@ class ProductVariantController extends AbstractController
         $this->em->persist($variant);
         $this->em->flush();
 
-        // Pour Refine, il est préférable de renvoyer l'objet complet sérialisé
         return $this->json($this->serializeVariant($variant), 201);
     }
 

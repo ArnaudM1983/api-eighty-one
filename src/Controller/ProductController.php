@@ -141,6 +141,7 @@ class ProductController extends AbstractController
         $product->setSku($data['sku'] ?? null);
         $product->setPrice($data['price'] ?? null);
         $product->setStock($data['stock'] ?? null);
+        $product->setWeight(isset($data['weight']) ? (float)$data['weight'] : null);
         $product->setFeatured($data['featured'] ?? false);
         $product->setMainImage($data['main_image'] ?? null);
 
