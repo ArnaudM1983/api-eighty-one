@@ -199,6 +199,7 @@ class ProductController extends AbstractController
             }
         }
         if (isset($data['stock'])) $product->setStock($data['stock']);
+        if (isset($data['weight'])) $product->setWeight($data['weight']);
         if (isset($data['featured'])) $product->setFeatured($data['featured']);
         if (isset($data['main_image'])) $product->setMainImage($data['main_image']);
 
