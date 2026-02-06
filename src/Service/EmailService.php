@@ -9,15 +9,15 @@ use Symfony\Component\Mime\Address;
 
 class EmailService
 {
-    // On définit l'adresse principale ici pour pouvoir la modifier partout d'un coup
-    private const STORE_EMAIL = 'eightyone@hotmail.fr';
-    private const STORE_TEST = 'admin-test@eightyone.com';
-    private const STORE_NAME = 'Eighty One Store';
-
-    public function __construct(private MailerInterface $mailer) {}
+    public function __construct(
+        private MailerInterface $mailer,
+        private string $senderEmail, // Injecté via services.yaml
+        private string $senderName,  // Injecté via services.yaml
+        private string $adminEmail   // Injecté via services.yaml
+    ) {}
 
     /**
-     * Mail envoyé au CLIENT
+     * Mail envoyé au CLIENT : Confirmation de commande
      */
     public function sendOrderConfirmation(Order $order): void
     {
@@ -28,9 +28,10 @@ class EmailService
         }
 
         $email = (new TemplatedEmail())
-            ->from(new Address(self::STORE_EMAIL, self::STORE_NAME))
+            ->from(new Address($this->senderEmail, $this->senderName))
             ->to(new Address($shippingInfo->getEmail(), $shippingInfo->getFirstName()))
-            ->subject('Confirmation de votre commande ' . self::STORE_NAME . ' #' . $order->getId())
+            ->replyTo(new Address($this->adminEmail)) // Important pour que le client puisse répondre
+            ->subject('Confirmation de votre commande ' . $this->senderName . ' #' . $order->getId())
             ->htmlTemplate('emails/order_confirmation.html.twig')
             ->context([
                 'order' => $order,
@@ -40,21 +41,21 @@ class EmailService
     }
 
     /**
-     * Mail envoyé à l'ADMIN 
+     * Mail envoyé à l'ADMIN : Nouvelle commande reçue
      */
     public function sendAdminNotification(Order $order): void
     {
-
         // On force le chargement des données pour que Twig n'ait plus besoin de la BDD
         foreach ($order->getItems() as $item) {
-            $item->getProduct()->getName(); // Force le chargement du produit
+            $item->getProduct()->getName();
             if ($item->getVariant()) {
-                $item->getVariant()->getName(); // Force le chargement de la variante
+                $item->getVariant()->getName();
             }
         }
+
         $email = (new TemplatedEmail())
-            ->from(new Address(self::STORE_EMAIL, 'Eighty One System'))
-            ->to(self::STORE_TEST) // Adresse de reception du mail
+            ->from(new Address($this->senderEmail, 'Eighty One System'))
+            ->to(new Address($this->adminEmail)) // Envoi vers ton adresse Admin
             ->subject('🚀 Nouvelle commande à préparer : #' . $order->getId())
             ->htmlTemplate('emails/admin_order_notification.html.twig')
             ->context([
@@ -65,7 +66,7 @@ class EmailService
     }
 
     /**
-     * Mail envoyé au CLIENT quand la commande est expédiée
+     * Mail envoyé au CLIENT : Commande expédiée
      */
     public function sendShippingNotification(Order $order): void
     {
@@ -76,8 +77,9 @@ class EmailService
         }
 
         $email = (new TemplatedEmail())
-            ->from(new Address(self::STORE_EMAIL, self::STORE_NAME))
+            ->from(new Address($this->senderEmail, $this->senderName))
             ->to(new Address($shippingInfo->getEmail(), $shippingInfo->getFirstName()))
+            ->replyTo(new Address($this->adminEmail))
             ->subject('Bonne nouvelle ! Votre commande Eighty One #' . $order->getId() . ' est en route')
             ->htmlTemplate('emails/order_shipped.html.twig')
             ->context([
@@ -88,8 +90,7 @@ class EmailService
     }
 
     /**
-     * Mail envoyé dès que la commande "Pickup" est validée 
-     * (soit après paiement Stripe, soit après validation du choix Boutique)
+     * Mail envoyé au CLIENT : Confirmation Retrait Boutique
      */
     public function sendPickupConfirmation(Order $order): void
     {
@@ -97,8 +98,9 @@ class EmailService
         if (!$shippingInfo || !$shippingInfo->getEmail()) return;
 
         $email = (new TemplatedEmail())
-            ->from(new Address(self::STORE_EMAIL, self::STORE_NAME))
+            ->from(new Address($this->senderEmail, $this->senderName))
             ->to(new Address($shippingInfo->getEmail(), $shippingInfo->getFirstName()))
+            ->replyTo(new Address($this->adminEmail))
             ->subject('Confirmation de votre commande en retrait boutique - #' . $order->getId())
             ->htmlTemplate('emails/order_pickup_confirmation.html.twig')
             ->context(['order' => $order]);
@@ -107,8 +109,7 @@ class EmailService
     }
 
     /**
-     * Mail envoyé au CLIENT avec le récapitulatif/facture 
-     * déclenché lors de l'expédition ou du retrait
+     * Mail envoyé au CLIENT : Facture / Récapitulatif
      */
     public function sendInvoiceNotification(Order $order): void
     {
@@ -116,8 +117,9 @@ class EmailService
         if (!$shippingInfo || !$shippingInfo->getEmail()) return;
 
         $email = (new TemplatedEmail())
-            ->from(new Address(self::STORE_EMAIL, self::STORE_NAME))
+            ->from(new Address($this->senderEmail, $this->senderName))
             ->to(new Address($shippingInfo->getEmail(), $shippingInfo->getFirstName()))
+            ->replyTo(new Address($this->adminEmail))
             ->subject('Votre facture Eighty One Store - Commande #' . $order->getId())
             ->htmlTemplate('emails/order_invoice.html.twig') 
             ->context([
@@ -130,12 +132,11 @@ class EmailService
     }
 
     /**
-     * Mail Admin spécifique pour le "Click & Collect" avec paiement sur place
-     * Réutilise le template admin existant qui gère déjà l'affichage "À PAYER"
+     * Mail envoyé à l'ADMIN : Notification spéciale retrait boutique
      */
     public function sendAdminPickupNotification(Order $order): void
     {
-        // On force le chargement des données (comme dans ta méthode standard)
+        // On force le chargement des données
         foreach ($order->getItems() as $item) {
             $item->getProduct()->getName(); 
             if ($item->getVariant()) {
@@ -144,10 +145,10 @@ class EmailService
         }
 
         $email = (new TemplatedEmail())
-            ->from(new Address(self::STORE_EMAIL, 'Eighty One System'))
-            ->to(self::STORE_TEST) 
-            ->subject('⚠️ Action requise : Retrait Boutique à encaisser #' . $order->getId()) // Objet différent pour attirer l'attention
-            ->htmlTemplate('emails/admin_order_notification.html.twig') // On réutilise ton super template
+            ->from(new Address($this->senderEmail, 'Eighty One System'))
+            ->to(new Address($this->adminEmail))
+            ->subject('⚠️ Action requise : Retrait Boutique à encaisser #' . $order->getId())
+            ->htmlTemplate('emails/admin_order_notification.html.twig')
             ->context([
                 'order' => $order,
             ]);
