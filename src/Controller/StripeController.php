@@ -25,7 +25,23 @@ class StripeController extends AbstractController
         Stripe::setApiKey($this->getParameter('stripe_secret_key'));
         $total = $order->getTotal();
 
-        // 1. On cherche s'il y a déjà un paiement
+        // --- NETTOYAGE PRÉVENTIF ---
+        // On vérifie s'il y a un brouillon de paiement qui n'est PAS du Stripe (ex: PayPal annulé)
+        // ou un vieux Stripe 'pending' qu'on voudrait écraser.
+        $existingPayment = $em->getRepository(Payment::class)->findOneBy(['order' => $order]);
+
+        if ($existingPayment && $existingPayment->getStatus() === 'pending') {
+            // Si on change de méthode (ex: c'était PayPal) ou si on veut forcer un reset
+            if ($existingPayment->getMethod() !== 'stripe') {
+                $em->remove($existingPayment);
+                $em->flush();
+                // On met $payment à null pour forcer la création d'un nouveau
+                $existingPayment = null; 
+            }
+        }
+        // ---------------------------
+
+        // 1. On cherche s'il y a déjà un paiement Stripe valide en cours
         $payment = $em->getRepository(Payment::class)->findOneBy([
             'order' => $order,
             'method' => 'stripe'
@@ -38,12 +54,17 @@ class StripeController extends AbstractController
                     'amount' => (int)($total * 100),
                 ]);
             } else {
-                // Si non trouvé, on en crée un nouveau
+                // --- FIX STRIPE : Clé d'idempotence ---
+                // Si on appelle cette ligne 2 fois, Stripe ne créera qu'un seul paiement
+                $idempotencyKey = 'order_intent_' . $order->getId();
+
                 $intent = PaymentIntent::create([
                     'amount' => (int)($total * 100),
                     'currency' => 'eur',
                     'automatic_payment_methods' => ['enabled' => true],
                     'metadata' => ['order_id' => $order->getId()]
+                ], [
+                    'idempotency_key' => $idempotencyKey
                 ]);
 
                 $payment = new Payment();
@@ -58,10 +79,8 @@ class StripeController extends AbstractController
             $em->persist($payment);
             $em->flush();
         } catch (\Exception $e) {
-            // --- LE FIX EST ICI ---
-            // Si l'erreur est une violation d'unicité (Requête B), on essaie de récupérer 
-            // le paiement que la Requête A vient juste de créer.
-            $em->clear(); // On vide l'EntityManager pour rafraîchir les données
+            // Gestion de concurrence : si BDD en erreur (UniqueConstraint), on recharge
+            $em->clear(); 
             $payment = $em->getRepository(Payment::class)->findOneBy([
                 'order' => $order,
                 'method' => 'stripe'
@@ -71,7 +90,6 @@ class StripeController extends AbstractController
                 return $this->json(['error' => 'Erreur critique lors de la création du paiement'], 500);
             }
 
-            // On récupère l'intent Stripe pour renvoyer le clientSecret à React
             $intent = PaymentIntent::retrieve($payment->getTransactionId());
         }
 
@@ -89,7 +107,6 @@ class StripeController extends AbstractController
         $endpointSecret = $this->getParameter('stripe_webhook_secret');
 
         try {
-            // Vérification de la signature pour être sûr que ça vient bien de Stripe
             $event = Webhook::constructEvent($payload, $sigHeader, $endpointSecret);
         } catch (\UnexpectedValueException $e) {
             return new Response('Invalid payload', 400);
@@ -97,39 +114,33 @@ class StripeController extends AbstractController
             return new Response('Invalid signature', 400);
         }
 
-        // Gestion de l'événement de succès
         if ($event->type === 'payment_intent.succeeded') {
-            $paymentIntent = $event->data->object; // L'objet PaymentIntent de Stripe
+            $paymentIntent = $event->data->object;
 
-            // Retrouver le paiement dans en base de données
             $payment = $em->getRepository(Payment::class)->findOneBy([
                 'transactionId' => $paymentIntent->id
             ]);
 
             if ($payment) {
+                // Protection pour ne pas traiter 2 fois
+                if ($payment->getStatus() === 'success') {
+                    return new Response('Already processed', 200);
+                }
+
                 $payment->setStatus('success');
                 $order = $payment->getOrder();
                 $order->setStatus('paid');
                 $em->flush();
 
-                // Décrémente le stock
                 $stockService->decrementStock($order);
 
-                // On vérifie le mode de livraison pour envoyer le bon template
                 if ($order->getShippingMethod() === 'pickup') {
-                    // Cas 1 : Retrait boutique payé en ligne
                     $emailService->sendPickupConfirmation($order);
                 } else {
-                    // Cas 2 : Livraison Domicile / Point Relais
                     $emailService->sendOrderConfirmation($order);
                 }
 
-                // Notification Admin 
-                if ($order->getShippingMethod() === 'pickup') {
-                    $emailService->sendAdminNotification($order);
-                } else {
-                    $emailService->sendAdminNotification($order);
-                }
+                $emailService->sendAdminNotification($order);
             }
         }
 

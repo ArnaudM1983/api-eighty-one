@@ -18,8 +18,6 @@ class PayPalController extends AbstractController
 {
     public function __construct(private HttpClientInterface $client) {}
 
-    // --- OUTILS PRIVÉS ---
-
     private function getBaseUrl(): string
     {
         return $this->getParameter('paypal_mode') === 'LIVE'
@@ -41,18 +39,33 @@ class PayPalController extends AbstractController
         }
     }
 
-    // --- ENDPOINTS ---
-
-    // 1. CRÉATION (Appelé quand on clique sur le bouton PayPal)
+    // 1. CRÉATION
     #[Route('/create/{id}', name: 'api_paypal_create', methods: ['POST'])]
     public function createOrder(Order $order, EntityManagerInterface $em): JsonResponse
     {
+        // --- NETTOYAGE PRÉVENTIF ---
+        // On vérifie s'il y a déjà un paiement en attente (Stripe ou ancien PayPal)
+        $existingPayment = $em->getRepository(Payment::class)->findOneBy(['order' => $order]);
+
+        if ($existingPayment) {
+            // Si la commande est déjà payée, on arrête tout
+            if ($existingPayment->getStatus() === 'success') {
+                 return $this->json(['error' => 'Commande déjà payée'], 400);
+            }
+            
+            // Sinon, on supprime le brouillon existant pour éviter le doublon en base
+            // (Ex: l'utilisateur avait ouvert le form Stripe juste avant)
+            if ($existingPayment->getStatus() === 'pending') {
+                $em->remove($existingPayment);
+                $em->flush();
+            }
+        }
+        // ---------------------------
+
         $accessToken = $this->getAccessToken();
         if (!$accessToken) return $this->json(['error' => 'Erreur connexion PayPal'], 500);
 
         $url = $this->getBaseUrl() . '/v2/checkout/orders';
-        
-        // On formate le prix (ex: "19.90")
         $total = number_format($order->getTotal(), 2, '.', '');
 
         try {
@@ -76,7 +89,6 @@ class PayPalController extends AbstractController
 
             $paypalOrderId = $response->toArray()['id'];
 
-            // On enregistre le début du paiement en base
             $payment = new Payment();
             $payment->setOrder($order);
             $payment->setMethod('paypal');
@@ -94,7 +106,7 @@ class PayPalController extends AbstractController
         }
     }
 
-    // 2. CAPTURE (Appelé quand le client valide le paiement sur la popup)
+    // 2. CAPTURE
     #[Route('/capture/{id}', name: 'api_paypal_capture', methods: ['POST'])]
     public function captureOrder(Request $request, Order $order, EntityManagerInterface $em, EmailService $emailService, StockService $stockService): JsonResponse
     {
@@ -116,17 +128,20 @@ class PayPalController extends AbstractController
 
             $result = $response->toArray();
 
-            // Si le paiement est validé ('COMPLETED')
             if (isset($result['status']) && $result['status'] === 'COMPLETED') {
                 
-                // Mise à jour BDD
                 $payment = $em->getRepository(Payment::class)->findOneBy(['transactionId' => $paypalOrderId]);
+                
                 if ($payment) {
+                    // Protection anti-doublon webhook/capture
+                    if ($payment->getStatus() === 'success') {
+                        return $this->json(['status' => 'COMPLETED']);
+                    }
+
                     $payment->setStatus('success');
                     $order->setStatus('paid');
                     $em->flush();
 
-                    // Actions Métier
                     $stockService->decrementStock($order);
                     
                     if ($order->getShippingMethod() === 'pickup') {
