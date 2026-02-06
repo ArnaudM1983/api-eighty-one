@@ -24,27 +24,39 @@ class DashboardController extends AbstractController
             $startOfLastMonth = new \DateTime('first day of last month 00:00:00');
             $endOfLastMonth = new \DateTime('last day of last month 23:59:59');
 
-            // --- 1. CHIFFRES CLÉS ---
-            $currentRevenue = (float)($orderRepo->getRevenueSince($startOfCurrentMonth) ?? 0.0);
+            // --- 1. CHIFFRES GLOBAUX (Inclus Livraison) ---
+            $currentGlobalRevenue = (float)($orderRepo->getRevenueSince($startOfCurrentMonth) ?? 0.0);
             $currentOrderCount = (int)($orderRepo->countSince($startOfCurrentMonth) ?? 0);
+            
+            // --- 2. CALCUL FRAIS DE PORT (Mois en cours) ---
+            // On récupère la somme des frais de port pour les commandes validées ce mois-ci
+            $currentShippingRevenue = (float)$orderRepo->createQueryBuilder('o')
+                ->select('SUM(o.shippingCost)')
+                ->where('o.createdAt >= :startDate')
+                ->andWhere('o.status IN (:statuses)')
+                ->setParameter('startDate', $startOfCurrentMonth)
+                ->setParameter('statuses', ['paid', 'shipped', 'completed'])
+                ->getQuery()
+                ->getSingleScalarResult() ?? 0.0;
+
+            // --- 3. CALCUL CA PRODUITS (HT et TTC) ---
+            // CA TTC Hors Livraison
+            $productRevenueTTC = $currentGlobalRevenue - $currentShippingRevenue;
+            
+            // CA HT Hors Livraison (Hypothèse TVA 20% -> division par 1.2)
+            $productRevenueHT = $productRevenueTTC / 1.2;
+
+            // --- 4. TENDANCE (Basée sur le global pour simplifier) ---
             $lastMonthRevenue = (float)($orderRepo->getRevenueBetween($startOfLastMonth, $endOfLastMonth) ?? 0.0);
-
-            // Revenu RÉEL Encaissé (Somme des paiements success)
-            $actualCollected = (float)$em->createQueryBuilder()
-                ->select('SUM(p.amount)')
-                ->from(Payment::class, 'p')
-                ->where('p.status = :status')
-                ->andWhere('p.createdAt >= :startDate') 
-                ->setParameter('status', 'success')
-                ->setParameter('startDate', $startOfCurrentMonth) 
-                ->getQuery()->getSingleScalarResult() ?? 0.0;
-
             $calculateTrend = fn($current, $previous) =>
             $previous > 0 ? round((($current - $previous) / $previous) * 100, 1) : 0;
+            
+            $trend = $calculateTrend($currentGlobalRevenue, $lastMonthRevenue);
 
-            $currentAvgBasket = $currentOrderCount > 0 ? $currentRevenue / $currentOrderCount : 0;
+            // Panier moyen (basé sur le TTC global, c'est souvent ce qu'on veut voir)
+            $currentAvgBasket = $currentOrderCount > 0 ? $currentGlobalRevenue / $currentOrderCount : 0;
 
-            // --- 2. MEILLEURES VENTES (Par Variantes) ---
+            // --- 5. MEILLEURES VENTES ---
             $bestSellersRaw = $em->createQueryBuilder()
                 ->select(
                     'p.name as productName',
@@ -63,14 +75,13 @@ class DashboardController extends AbstractController
                 ->setMaxResults(5)
                 ->getQuery()->getResult();
 
-            // Formatage propre pour le Dashboard React
             $bestSellers = array_map(fn($b) => [
                 'name' => $b['productName'] . ($b['variantName'] ? ' (' . $b['variantName'] . ')' : ''),
                 'sales' => (int)$b['totalSales'],
                 'revenue' => number_format((float)$b['totalRevenue'], 2, '.', '')
             ], $bestSellersRaw);
 
-            // --- 3. ACTIVITÉS RÉCENTES ---
+            // --- 6. ACTIVITÉS RÉCENTES ---
             $recentOrdersRaw = $orderRepo->findBy([], ['createdAt' => 'DESC'], 5);
             $recentOrders = array_map(function ($o) {
                 $shipping = $o->getShippingInfo();
@@ -83,30 +94,31 @@ class DashboardController extends AbstractController
                 ];
             }, $recentOrdersRaw);
 
-            // --- 4. COMMANDES A PREPARER ---
             $toPrepareCount = (int)$orderRepo->count(['status' => 'paid']);
 
             return $this->json([
                 'revenue' => [
-                    'value' => number_format($currentRevenue, 2, ',', ' ') . ' €',
-                    'actualCollected' => number_format($actualCollected, 2, ',', ' ') . ' €',
+                    // On envoie les nouvelles valeurs calculées
+                    'productTTC' => number_format($productRevenueTTC, 2, ',', ' ') . ' €',
+                    'productHT' => number_format($productRevenueHT, 2, ',', ' ') . ' €',
                     'month' => $now->format('F'),
-                    'trend' => $calculateTrend($currentRevenue, $lastMonthRevenue)
+                    'trend' => $trend
                 ],
                 'orders' => [
                     'count' => $currentOrderCount,
-                    'trend' => 0 // Tu peux calculer la tendance ici aussi si nécessaire
+                    'trend' => 0
                 ],
                 'basket' => [
                     'value' => number_format($currentAvgBasket, 2, ',', ' ') . ' €',
                 ],
-                'bestSellers' => $bestSellers, // Utilise la variable déjà mappée
+                'bestSellers' => $bestSellers,
                 'recentOrders' => $recentOrders,
+                // Le chart reste sur le global pour l'instant
                 'chartData' => [
-                    ['name' => 'Sem 1', 'sales' => round($currentRevenue * 0.25, 2)],
-                    ['name' => 'Sem 2', 'sales' => round($currentRevenue * 0.45, 2)],
-                    ['name' => 'Sem 3', 'sales' => round($currentRevenue * 0.75, 2)],
-                    ['name' => 'Sem 4', 'sales' => round($currentRevenue, 2)],
+                    ['name' => 'Sem 1', 'sales' => round($currentGlobalRevenue * 0.25, 2)],
+                    ['name' => 'Sem 2', 'sales' => round($currentGlobalRevenue * 0.45, 2)],
+                    ['name' => 'Sem 3', 'sales' => round($currentGlobalRevenue * 0.75, 2)],
+                    ['name' => 'Sem 4', 'sales' => round($currentGlobalRevenue, 2)],
                 ],
                 'logistics' => [
                     'toPrepare' => $toPrepareCount
