@@ -24,6 +24,6 @@
 /config/jwt/*.pem
 ###< lexik/jwt-authentication-bundle ###
 
-###> Images File ###
+###> Images File ####
 /public/uploads/
 ###> Images File ###
