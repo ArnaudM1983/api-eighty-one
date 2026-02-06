@@ -356,6 +356,7 @@ class ProductController extends AbstractController
             'main_image' => $product->getMainImage(),
             'created_at' => $product->getCreatedAt()?->format('Y-m-d H:i:s'),
             'updated_at' => $product->getUpdatedAt()?->format('Y-m-d H:i:s'),
+            'has_variants' => $product->getVariants()->count() > 0,
         ];
     }
 
