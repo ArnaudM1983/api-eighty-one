@@ -34,7 +34,9 @@ class DashboardController extends AbstractController
                 ->select('SUM(p.amount)')
                 ->from(Payment::class, 'p')
                 ->where('p.status = :status')
+                ->andWhere('p.createdAt >= :startDate') 
                 ->setParameter('status', 'success')
+                ->setParameter('startDate', $startOfCurrentMonth) 
                 ->getQuery()->getSingleScalarResult() ?? 0.0;
 
             $calculateTrend = fn($current, $previous) =>
