@@ -239,7 +239,7 @@ class ProductController extends AbstractController
             foreach ($product->getRelatedProducts() as $related) {
                 $product->removeRelatedProduct($related);
             }
-            
+
             // 2. On ajoute les nouvelles
             foreach ($data['related_product_ids'] as $relatedId) {
                 $relatedProd = $this->repo->find($relatedId);
@@ -342,6 +342,15 @@ class ProductController extends AbstractController
     // Serializer Léger (pour les listes)
     private function serializeProductWithoutVariants(Product $product): array
     {
+        $variants = $product->getVariants();
+        $totalStock = $product->getStock();
+
+        if ($variants->count() > 0) {
+            $totalStock = 0;
+            foreach ($variants as $v) {
+                $totalStock += $v->getStock();
+            }
+        }
         return [
             'id' => $product->getId(),
             'name' => $product->getName(),
@@ -350,7 +359,7 @@ class ProductController extends AbstractController
             'excerpt' => $product->getExcerpt(),
             'sku' => $product->getSku(),
             'price' => $product->getPrice(),
-            'stock' => $product->getStock(),
+            'stock' => $totalStock,
             'weight' => $product->getWeight(),
             'featured' => $product->isFeatured(),
             'main_image' => $product->getMainImage(),
@@ -366,7 +375,14 @@ class ProductController extends AbstractController
         $formatImagePath = fn(?string $path) => $path ? '/' . ltrim($path, '/') : null;
 
         $variants = $p->getVariants()->toArray();
-        $variantCount = count($variants);
+        $totalStock = $p->getStock();
+
+        if (count($variants) > 0) {
+            $totalStock = 0;
+            foreach ($variants as $v) {
+                $totalStock += $v->getStock();
+            }
+        }
 
         return [
             'id' => $p->getId(),
@@ -376,7 +392,6 @@ class ProductController extends AbstractController
             'excerpt' => $p->getExcerpt(),
             'sku' => $p->getSku(),
             'price' => $p->getPrice(),
-            'stock' => $p->getStock(),
             'weight' => $p->getWeight(),
             'featured' => $p->isFeatured(),
             'main_image' => $formatImagePath($p->getMainImage()),
@@ -401,9 +416,9 @@ class ProductController extends AbstractController
                 'image' => $formatImagePath($v->getImage()),
                 'attributes' => $v->getAttributes()
             ], $variants),
-            'variant_count' => $variantCount,
-            'has_variants' => $variantCount > 0,
-            
+            'stock' => $totalStock,
+            'has_variants' => count($variants) > 0,
+
             // --- NOUVEAU : Sérialisation des produits liés ---
             'related_products' => $p->getRelatedProducts()->map(fn($rp) => [
                 'id' => $rp->getId(),
