@@ -3,7 +3,14 @@ framework:
     secret: '%env(APP_SECRET)%'
 
     # Note that the session will be started ONLY if you read or write from it.
-    session: true
+    session:
+        # Remplace le simple "true" précédent
+        handler_id: null
+        cookie_httponly: true
+        cookie_secure: auto
+        cookie_samesite: lax
+        # Durée de vie du cookie (ex: 2 jours pour le panier)
+        cookie_lifetime: 172800
 
     #esi: true
     #fragments: true
