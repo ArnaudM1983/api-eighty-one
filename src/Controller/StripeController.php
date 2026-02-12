@@ -26,7 +26,7 @@ class StripeController extends AbstractController
         $total = $order->getTotal();
 
         // --- NETTOYAGE PRÉVENTIF ---
-        // On vérifie s'il y a un brouillon de paiement qui n'est PAS du Stripe (ex: PayPal annulé)
+        // On vérifie s'il y a un brouillon de paiement qui n'est PAS du Stripe 
         // ou un vieux Stripe 'pending' qu'on voudrait écraser.
         $existingPayment = $em->getRepository(Payment::class)->findOneBy(['order' => $order]);
 
