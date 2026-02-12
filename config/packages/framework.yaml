@@ -4,13 +4,14 @@ framework:
 
     # Note that the session will be started ONLY if you read or write from it.
     session:
-        # Remplace le simple "true" précédent
         handler_id: null
         cookie_httponly: true
-        cookie_secure: auto
-        cookie_samesite: lax
-        # Durée de vie du cookie (ex: 2 jours pour le panier)
-        cookie_lifetime: 172800
+        # Utilisation de la variable d'environnement pour gérer local vs prod
+        cookie_secure: '%env(bool:CART_COOKIE_SECURE)%'
+        # Indispensable pour autoriser le partage du cookie entre localhost et OVH
+        cookie_samesite: none
+        # Augmenté à 30 jours pour que tes clients ne perdent pas leur panier trop vite
+        cookie_lifetime: 2592000
 
     #esi: true
     #fragments: true
