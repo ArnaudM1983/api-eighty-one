@@ -48,27 +48,27 @@ class CartController extends AbstractController
     }
 
     /**
-     * Attach cart cookie to a JsonResponse
-     * Private helper method
-     */
-    private function setCookieResponse(JsonResponse $response, Cart $cart)
-    {
-        $response->headers->setCookie(
-            new Cookie(
-                'cart_token',
-                $cart->getToken(),
-                strtotime('+30 days'),
-                '/',
-                null,
-                false,
-                true,
-                false,
-                'lax'
-            )
-        );
+* Attach cart cookie to a JsonResponse
+* Private helper method
+*/
+private function setCookieResponse(JsonResponse $response, Cart $cart)
+{
+$response->headers->setCookie(
+new Cookie(
+'cart_token',          // Nom
+$cart->getToken(),      // Valeur
+strtotime('+30 days'),  // Expiration
+'/',                    // Chemin
+null,                   // Domaine
+true,                   // SECURE : Doit être à TRUE (HTTPS OVH)
+true,                   // HTTPONLY : true
+false,                  // RAW : false
+'none'                  // SAMESITE : DOIT ÊTRE À 'none'
+)
+);
 
-        return $response;
-    }
+    return $response;
+}
 
 
     /**
