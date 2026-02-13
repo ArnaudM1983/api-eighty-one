@@ -8,7 +8,6 @@
         .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #f0f0f0; }
         .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 20px; margin-bottom: 20px; }
         
-        /* Style spécifique pour le badge d'expédition */
         .shipping-badge { 
             display: inline-block; 
             background: #000; 
@@ -28,9 +27,6 @@
         .address-column { display: table-cell; width: 50%; padding: 15px; background: #f9f9f9; border: 1px solid #eee; vertical-align: top; }
         .address-header { font-weight: bold; text-transform: uppercase; font-size: 12px; margin-bottom: 10px; display: block; border-bottom: 1px solid #ccc; }
         
-        .button-wrapper { text-align: center; margin: 30px 0; }
-        .button { background: #01B0F0; color: #fff; padding: 15px 25px; text-decoration: none; font-weight: bold; border-radius: 4px; text-transform: uppercase; font-size: 13px; }
-
         .footer { text-align: center; font-size: 11px; color: #999; margin-top: 40px; }
     </style>
 </head>
@@ -79,7 +75,11 @@
 
             <div class="address-column" style="border-left: 10px solid white;">
                 <span class="address-header">Lieu de livraison</span>
-                {% if order.shippingInfo.pudoId %}
+                {% if order.shippingMethod == 'pickup' %}
+                    <strong>Retrait en Boutique</strong><br>
+                    Eighty One Store<br>
+                    21 rue des Capucins, 69001 Lyon
+                {% elseif order.shippingInfo.pudoId is not empty %}
                     <strong>Point Relais : {{ order.shippingInfo.pudoName }}</strong><br>
                     {{ order.shippingInfo.pudoAddress }}<br>
                     {{ order.shippingInfo.pudoPostalCode }} {{ order.shippingInfo.pudoCity }}

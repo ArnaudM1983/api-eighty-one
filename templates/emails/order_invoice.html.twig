@@ -83,7 +83,15 @@
 
         <div style="clear: both; margin-top: 40px; font-size: 12px;">
             <p><strong>Mode de paiement :</strong> {{ order.shippingMethod == 'pickup' ? 'Paiement en boutique' : 'Carte Bancaire (Stripe)' }}</p>
-            <p><strong>Mode de livraison :</strong> {{ order.shippingMethod == 'pickup' ? 'Retrait sur place' : order.shippingMethod }}</p>
+            <p><strong>Mode de livraison :</strong> 
+                {% if order.shippingMethod == 'pickup' %}
+                    Retrait en Boutique
+                {% elseif order.shippingInfo.pudoId is not empty %}
+                    Point Relais ({{ order.shippingMethod }})
+                {% else %}
+                    Livraison à Domicile ({{ order.shippingMethod }})
+                {% endif %}
+            </p>
         </div>
 
         <div class="footer">

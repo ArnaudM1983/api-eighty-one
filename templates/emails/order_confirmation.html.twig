@@ -75,11 +75,17 @@
             <div class="address-column" style="border-left: 10px solid white;">
                 <span class="address-header">Mode de livraison</span>
                 
-                {% if order.shippingInfo.pudoId %}
+                {% if order.shippingMethod == 'pickup' %}
+                    {# CAS RETRAIT BOUTIQUE #}
+                    <strong>Retrait en Boutique</strong><br>
+                    Eighty One Store<br>
+                    21 rue des Capucins<br>
+                    69001 Lyon
+                {% elseif order.shippingInfo.pudoId is not empty %}
                     {# CAS POINT RELAIS #}
                     <strong>Point Relais : {{ order.shippingInfo.pudoName }}</strong><br>
                     {{ order.shippingInfo.pudoAddress }}<br>
-                    {{ order.shippingInfo.pudoPostalCode }} {{ order.shippingInfo.pudoCity }}<br>
+                    {{ order.shippingInfo.pudoPostalCode }} {{ order.shippingInfo.pudoCity }}
                 {% else %}
                     {# CAS DOMICILE #}
                     <strong>À domicile</strong><br>
