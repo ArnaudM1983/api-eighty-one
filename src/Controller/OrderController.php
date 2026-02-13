@@ -228,7 +228,7 @@ class OrderController extends AbstractController
      * API: Update Status (Dashboard Admin)
      * Gère : Changement de statut, Paiement comptoir, Remboursement Stripe, Restockage, Envoi Facture.
      */
-    #[Route('/{id}/status', name: 'api_order_update_status', methods: ['PATCH', 'PUT'])]
+    #[Route('/{id}/status', name: 'api_order_update_status', methods: ['PATCH', 'PUT', 'POST'])]
     #[IsGranted('ROLE_ADMIN')]
     public function updateStatus(
         Order $order, 
