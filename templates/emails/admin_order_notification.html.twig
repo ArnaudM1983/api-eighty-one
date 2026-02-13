@@ -61,27 +61,22 @@
                     <tr>
                         {# Colonne Image #}
                         <td class="img-cell">
-    {% set thumb = null %}
-    {% if item.variant and item.variant.image %}
-        {% set thumb = item.variant.image %}
-    {% elseif item.product.mainImage %}
-        {% set thumb = item.product.mainImage %}
-    {% endif %}
+                            {% set thumb = null %}
+                            {% if item.variant and item.variant.image %}
+                                {% set thumb = item.variant.image %}
+                            {% elseif item.product.mainImage %}
+                                {% set thumb = item.product.mainImage %}
+                            {% endif %}
 
-    {% if thumb %}
-        {# 
-           On utilise backend_url (configuré dans twig.yaml) 
-           et on s'assure qu'il n'y a pas de double slash avec |trim('/')
-        #}
-        {% set base = backend_url|default('http://localhost:8000')|trim('/') %}
-        {% set path = thumb|trim('/') %}
-        {% set fullImageUrl = thumb starts with 'http' ? thumb : base ~ '/' ~ path %}
-        
-        <img src="{{ fullImageUrl }}" class="product-img" alt="Produit">
-    {% else %}
-        <div style="width:50px; height:50px; background:#eee; line-height:50px; color:#aaa; font-size:10px; text-align: center;">N/A</div>
-    {% endif %}
-</td>
+                            {% if thumb %}
+                                {% set base = backend_url|default('http://localhost:8000')|trim('/') %}
+                                {% set path = thumb|trim('/') %}
+                                {% set fullImageUrl = thumb starts with 'http' ? thumb : base ~ '/' ~ path %}
+                                <img src="{{ fullImageUrl }}" class="product-img" alt="Produit">
+                            {% else %}
+                                <div style="width:50px; height:50px; background:#eee; line-height:50px; color:#aaa; font-size:10px; text-align: center;">N/A</div>
+                            {% endif %}
+                        </td>
 
                         {# Colonne Désignation #}
                         <td>
@@ -112,7 +107,7 @@
         {% if order.shippingMethod != 'pickup' %}
             <div class="section-title">🚚 LIVRAISON</div>
             <div class="info-box">
-                {% if order.shippingInfo.pudoId %}
+                {% if order.shippingInfo.pudoId is not empty %}
                     <span class="badge badge-relay">Point Relais ({{ order.shippingMethod }})</span>
                     <p style="margin-top:10px;">
                         <strong>ID Relais : {{ order.shippingInfo.pudoId }}</strong><br>
@@ -156,8 +151,8 @@
 
         <div style="margin-top: 30px; text-align: center;">
             {# Lien dynamique : Utilise site_url si disponible, sinon localhost #}
-            {% set adminBaseUrl = site_url|default('http://localhost:8000') %}
-            <a href="http://localhost:3000/admin/orders/{{ order.id }}" 
+            {% set adminBaseUrl = site_url|default('http://localhost:3000') %}
+            <a href="{{ adminBaseUrl }}/admin/orders/{{ order.id }}" 
                style="background: #000; color: #fff; padding: 12px 25px; text-decoration: none; font-weight: bold; border-radius: 4px; display: inline-block;">
                 VOIR DANS LE BACK-OFFICE
             </a>
