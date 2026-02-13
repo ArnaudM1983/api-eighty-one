@@ -11,70 +11,66 @@ class EmailService
 {
     public function __construct(
         private MailerInterface $mailer,
-        private string $senderEmail, // Injecté via services.yaml
-        private string $senderName,  // Injecté via services.yaml
-        private string $adminEmail   // Injecté via services.yaml
+        private string $senderEmail,
+        private string $senderName,
+        private string $adminEmail
     ) {}
 
     /**
-     * Mail envoyé au CLIENT : Confirmation de commande
+     * Méthode interne pour centraliser l'envoi et le log d'erreur
      */
+    private function safeSend(TemplatedEmail $email, string $label, int $orderId): void
+    {
+        $logFile = 'debug_emails_eightyone.txt';
+        $now = (new \DateTime())->format('Y-m-d H:i:s');
+
+        try {
+            $this->mailer->send($email);
+            file_put_contents($logFile, "[$now] SUCCÈS : $label pour Commande #$orderId\n", FILE_APPEND);
+        } catch (\Exception $e) {
+            $error = "[$now] ERREUR : $label pour Commande #$orderId -> " . $e->getMessage() . "\n";
+            file_put_contents($logFile, $error, FILE_APPEND);
+        }
+    }
+
     public function sendOrderConfirmation(Order $order): void
     {
         $shippingInfo = $order->getShippingInfo();
-
-        if (!$shippingInfo || !$shippingInfo->getEmail()) {
-            return;
-        }
+        if (!$shippingInfo || !$shippingInfo->getEmail()) return;
 
         $email = (new TemplatedEmail())
             ->from(new Address($this->senderEmail, $this->senderName))
             ->to(new Address($shippingInfo->getEmail(), $shippingInfo->getFirstName()))
-            ->replyTo(new Address($this->adminEmail)) // Important pour que le client puisse répondre
+            ->replyTo(new Address($this->adminEmail))
             ->subject('Confirmation de votre commande ' . $this->senderName . ' #' . $order->getId())
             ->htmlTemplate('emails/order_confirmation.html.twig')
-            ->context([
-                'order' => $order,
-            ]);
+            ->context(['order' => $order]);
 
-        $this->mailer->send($email);
+        $this->safeSend($email, "Mail Client Confirmation", $order->getId());
     }
 
-    /**
-     * Mail envoyé à l'ADMIN : Nouvelle commande reçue
-     */
     public function sendAdminNotification(Order $order): void
     {
-        // On force le chargement des données pour que Twig n'ait plus besoin de la BDD
+        // Forcer le chargement pour éviter les Lazy Loading Errors
         foreach ($order->getItems() as $item) {
-            $item->getProduct()->getName();
-            if ($item->getVariant()) {
-                $item->getVariant()->getName();
-            }
+            if ($item->getProduct()) $item->getProduct()->getName();
+            if ($item->getVariant()) $item->getVariant()->getName();
         }
 
         $email = (new TemplatedEmail())
             ->from(new Address($this->senderEmail, 'Eighty One System'))
-            ->to(new Address($this->adminEmail)) // Envoi vers ton adresse Admin
+            ->to(new Address($this->adminEmail))
             ->subject('🚀 Nouvelle commande à préparer : #' . $order->getId())
             ->htmlTemplate('emails/admin_order_notification.html.twig')
-            ->context([
-                'order' => $order,
-            ]);
+            ->context(['order' => $order]);
 
-        $this->mailer->send($email);
+        $this->safeSend($email, "Mail Admin Notification", $order->getId());
     }
 
-    /**
-     * Mail envoyé au CLIENT : Commande expédiée
-     */
     public function sendShippingNotification(Order $order): void
     {
         $shippingInfo = $order->getShippingInfo();
-
-        if (!$shippingInfo || !$shippingInfo->getEmail()) {
-            return;
-        }
+        if (!$shippingInfo || !$shippingInfo->getEmail()) return;
 
         $email = (new TemplatedEmail())
             ->from(new Address($this->senderEmail, $this->senderName))
@@ -82,16 +78,11 @@ class EmailService
             ->replyTo(new Address($this->adminEmail))
             ->subject('Bonne nouvelle ! Votre commande Eighty One #' . $order->getId() . ' est en route')
             ->htmlTemplate('emails/order_shipped.html.twig')
-            ->context([
-                'order' => $order,
-            ]);
+            ->context(['order' => $order]);
 
-        $this->mailer->send($email);
+        $this->safeSend($email, "Mail Client Expédition", $order->getId());
     }
 
-    /**
-     * Mail envoyé au CLIENT : Confirmation Retrait Boutique
-     */
     public function sendPickupConfirmation(Order $order): void
     {
         $shippingInfo = $order->getShippingInfo();
@@ -105,12 +96,9 @@ class EmailService
             ->htmlTemplate('emails/order_pickup_confirmation.html.twig')
             ->context(['order' => $order]);
 
-        $this->mailer->send($email);
+        $this->safeSend($email, "Mail Client Pickup", $order->getId());
     }
 
-    /**
-     * Mail envoyé au CLIENT : Facture / Récapitulatif
-     */
     public function sendInvoiceNotification(Order $order): void
     {
         $shippingInfo = $order->getShippingInfo();
@@ -124,24 +112,17 @@ class EmailService
             ->htmlTemplate('emails/order_invoice.html.twig') 
             ->context([
                 'order' => $order,
-                // Calcul de la TVA pour le template (20% incluse)
                 'totalTax' => (float)$order->getTotal() - ((float)$order->getTotal() / 1.2)
             ]);
 
-        $this->mailer->send($email);
+        $this->safeSend($email, "Mail Client Facture", $order->getId());
     }
 
-    /**
-     * Mail envoyé à l'ADMIN : Notification spéciale retrait boutique
-     */
     public function sendAdminPickupNotification(Order $order): void
     {
-        // On force le chargement des données
         foreach ($order->getItems() as $item) {
-            $item->getProduct()->getName(); 
-            if ($item->getVariant()) {
-                $item->getVariant()->getName();
-            }
+            if ($item->getProduct()) $item->getProduct()->getName(); 
+            if ($item->getVariant()) $item->getVariant()->getName();
         }
 
         $email = (new TemplatedEmail())
@@ -149,10 +130,8 @@ class EmailService
             ->to(new Address($this->adminEmail))
             ->subject('⚠️ Action requise : Retrait Boutique à encaisser #' . $order->getId())
             ->htmlTemplate('emails/admin_order_notification.html.twig')
-            ->context([
-                'order' => $order,
-            ]);
+            ->context(['order' => $order]);
 
-        $this->mailer->send($email);
+        $this->safeSend($email, "Mail Admin Pickup", $order->getId());
     }
 }
