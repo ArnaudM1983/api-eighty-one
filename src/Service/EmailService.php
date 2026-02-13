@@ -21,7 +21,7 @@ class EmailService
      */
     private function safeSend(TemplatedEmail $email, string $label, int $orderId): void
     {
-        $logFile = 'debug_emails_eightyone.txt';
+        $logFile = __DIR__ . '/../../var/log/debug_emails_eightyone.txt';
         $now = (new \DateTime())->format('Y-m-d H:i:s');
 
         try {
