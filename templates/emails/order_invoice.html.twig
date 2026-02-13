@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <style>
-        body { font-family: 'Helvetica', Arial, sans-serif; color: #333; }
+        body { font-family: 'Helvetica', Arial, sans-serif; color: #333; margin: 0; padding: 0; }
         .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; }
         .header { display: table; width: 100%; border-bottom: 2px solid #000; padding-bottom: 20px; }
         .col { display: table-cell; vertical-align: top; }
@@ -21,7 +21,10 @@
         <div class="header">
             <div class="col">
                 <h2 style="margin:0;">FACTURE</h2>
-                <p style="font-size: 12px; color: #666;">N° : INV-{{ order.id }}<br>Date : {{ "now"|date("d/m/Y") }}</p>
+                <p style="font-size: 12px; color: #666;">
+                    N° : INV-{{ order.id }}<br>
+                    Date : {{ "now"|date("d/m/Y") }}
+                </p>
             </div>
             <div class="col" style="text-align: right; font-size: 12px;">
                 <strong>Eighty One Store</strong><br>
@@ -32,10 +35,14 @@
 
         <div style="margin-top: 30px; font-size: 13px;">
             <strong>Destinataire :</strong><br>
-            {{ order.shippingInfo.firstName }} {{ order.shippingInfo.lastName }}<br>
-            {{ order.shippingInfo.address }}<br>
-            {{ order.shippingInfo.phone }}<br>
-            {{ order.shippingInfo.postalCode }} {{ order.shippingInfo.city }}
+            {% if order.shippingInfo is defined and order.shippingInfo is not null %}
+                {{ order.shippingInfo.firstName|default('') }} {{ order.shippingInfo.lastName|default('') }}<br>
+                {{ order.shippingInfo.address|default('') }}<br>
+                {{ order.shippingInfo.phone|default('') }}<br>
+                {{ order.shippingInfo.postalCode|default('') }} {{ order.shippingInfo.city|default('') }}
+            {% else %}
+                Client non renseigné
+            {% endif %}
         </div>
 
         <table class="table">
@@ -50,26 +57,28 @@
                 {% for item in order.items %}
                     <tr>
                         <td>
-                            {{ item.product.name }}
+                            <strong>{{ item.product.name|default('Produit') }}</strong>
                             {% if item.variant %}<br><small style="color:#777">{{ item.variant.name }}</small>{% endif %}
                         </td>
                         <td style="text-align: center;">{{ item.quantity }}</td>
-                        <td style="text-align: right;">{{ item.totalPrice|number_format(2, ',', ' ') }} €</td>
+                        <td style="text-align: right;">{{ item.totalPrice|default(0)|number_format(2, ',', ' ') }} €</td>
                     </tr>
                 {% endfor %}
             </tbody>
         </table>
 
         <div class="totals">
+            {% set total = order.total|default(0) %}
             <div>
                 <span>Total HT :</span>
-                <span>{{ (order.total / 1.2)|number_format(2, ',', ' ') }} €</span>
+                <span>{{ (total / 1.2)|number_format(2, ',', ' ') }} €</span>
             </div>
             <div>
                 <span>TVA (20%) :</span>
-                <span>{{ totalTax|number_format(2, ',', ' ') }} €</span>
+                {# Sécurité : si totalTax n'est pas passé par le contrôleur, on le calcule #}
+                <span>{{ totalTax|default(total - (total / 1.2))|number_format(2, ',', ' ') }} €</span>
             </div>
-            {% if order.shippingCost > 0 %}
+            {% if order.shippingCost is defined and order.shippingCost > 0 %}
             <div>
                 <span>Frais de port :</span>
                 <span>{{ order.shippingCost|number_format(2, ',', ' ') }} €</span>
@@ -77,26 +86,28 @@
             {% endif %}
             <div style="font-size: 18px; font-weight: bold; border-top: 1px solid #000; margin-top: 10px; padding-top: 10px;">
                 <span>TOTAL TTC :</span>
-                <span>{{ order.total|number_format(2, ',', ' ') }} €</span>
+                <span>{{ total|number_format(2, ',', ' ') }} €</span>
             </div>
         </div>
 
-        <div style="clear: both; margin-top: 40px; font-size: 12px;">
-            <p><strong>Mode de paiement :</strong> {{ order.shippingMethod == 'pickup' ? 'Paiement en boutique' : 'Carte Bancaire (Stripe)' }}</p>
-            <p><strong>Mode de livraison :</strong> 
+        <div style="clear: both; margin-top: 40px; font-size: 12px; background: #f9f9f9; padding: 10px;">
+            <p style="margin: 0 0 5px 0;"><strong>Mode de paiement :</strong> 
+                {{ order.shippingMethod == 'pickup' ? 'Paiement en boutique' : 'Carte Bancaire / En ligne' }}
+            </p>
+            <p style="margin: 0;"><strong>Mode de livraison :</strong> 
                 {% if order.shippingMethod == 'pickup' %}
-                    Retrait en Boutique
-                {% elseif order.shippingInfo.pudoId is not empty %}
-                    Point Relais ({{ order.shippingMethod }})
+                    Retrait en Boutique (Click & Collect)
+                {% elseif order.shippingInfo is defined and order.shippingInfo is not null and order.shippingInfo.pudoId is not empty %}
+                    Point Relais ({{ order.shippingMethod|default('Standard') }})
                 {% else %}
-                    Livraison à Domicile ({{ order.shippingMethod }})
+                    Livraison à Domicile
                 {% endif %}
             </p>
         </div>
 
         <div class="footer">
-            Eighty One Store - SARL au capital de XXX € - RCS Lyon XXX XXX XXX<br>
-            TVA Intracommunautaire : FRXXXXXXXXX
+            Eighty One Store - SARL au capital de 1000 € - RCS Lyon 123 456 789<br>
+            TVA Intracommunautaire : FR00123456789
         </div>
     </div>
 </body>
