@@ -14,8 +14,8 @@ class InstagramToken
     private \DateTimeInterface $expiresAt;
 
     public function getId(): ?int { return $this->id; }
-    public function getToken(): string { return $this->token; }
-    public function setToken(string $token): self { $this->token = $token; return $this; }
+    // public function getToken(): string { return $this->token; }
+    // public function setToken(string $token): self { $this->token = $token; return $this; }
     public function getExpiresAt(): \DateTimeInterface { return $this->expiresAt; }
     public function setExpiresAt(\DateTimeInterface $expiresAt): self { $this->expiresAt = $expiresAt; return $this; }
 }

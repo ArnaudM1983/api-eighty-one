@@ -36,7 +36,6 @@ class ApiTestController extends AbstractController
                 'results_count' => count($pointsRelais),
                 'points_relais' => $pointsRelais
             ]);
-
         } catch (Exception $e) {
             // 3. En cas d'échec (Hash MD5 incorrect, statut non 200, ou STAT !== 0)
             $logger->error('Erreur lors du test MR : ' . $e->getMessage());
@@ -49,7 +48,7 @@ class ApiTestController extends AbstractController
             ], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
-    
+
     // NOUVEAU : Endpoint pour afficher le XML brut après échec du statut HTTP
     #[Route('/api/test/mr/last-error-xml', name: 'api_test_mr_xml', methods: ['GET'])]
     public function showLastErrorXml(): Response
@@ -58,8 +57,10 @@ class ApiTestController extends AbstractController
         // Recherchez dans le dossier des logs (var/log/) le fichier qui commence par 'mr_error_'.
         return new Response(
             'Vérifiez le dossier `var/log/` de votre projet Symfony. ' .
-            'Si une erreur HTTP (non 200) s\'est produite, le corps de la réponse XML a été enregistré dans un fichier de type `mr_error_XXXXXXXXXX.xml`.',
+                'Si une erreur HTTP (non 200) s\'est produite, le corps de la réponse XML a été enregistré dans un fichier de type `mr_error_XXXXXXXXXX.xml`.',
             Response::HTTP_OK
         );
     }
+
+    
 }

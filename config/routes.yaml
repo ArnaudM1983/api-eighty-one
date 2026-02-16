@@ -3,3 +3,9 @@ controllers:
         path: ../src/Controller/
         namespace: App\Controller
     type: attribute
+
+# Cette route permet à Symfony de reconnaître l'URL, 
+# même si aucun contrôleur ne l'utilise (le firewall l'intercepte avant).
+api_login_check:
+    path: /api/login
+    methods: ['POST']

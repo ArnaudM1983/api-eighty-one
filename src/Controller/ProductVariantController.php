@@ -54,7 +54,6 @@ class ProductVariantController extends AbstractController
      * CRUD: Create
      * HTTP Method: POST
      * URL: /api/variants
-     * Description: Create a new variant.
      **/
     #[Route('', methods: ['POST'])]
     public function create(Request $request): JsonResponse
@@ -62,22 +61,55 @@ class ProductVariantController extends AbstractController
         $data = json_decode($request->getContent(), true);
 
         $variant = new ProductVariant();
-        $variant->setName($data['name']);
+        $variant->setName($data['name'] ?? '');
         $variant->setSku($data['sku'] ?? null);
-        $variant->setPrice($data['price'] ?? null);
-        $variant->setStock($data['stock'] ?? null);
+        
+        // Stock, Image et Attributs (Pas d'héritage nécessaire)
+        $variant->setStock(isset($data['stock']) ? (int)$data['stock'] : 0);
         $variant->setImage($data['image'] ?? null);
-        $variant->setAttributes($data['attributes'] ?? []);
+        
+        // Gestion propre des attributs (NULL si vide pour éviter [])
+        $attributes = $data['attributes'] ?? null;
+        $variant->setAttributes(!empty($attributes) ? $attributes : null);
 
-        if (!empty($data['product_id'])) {
-            $product = $this->em->getRepository(Product::class)->find($data['product_id']);
-            if ($product) $variant->setProduct($product);
+        // RÉCUPÉRATION ET HÉRITAGE DU PARENT
+        $pId = $data['product'] ?? $data['product_id'] ?? null;
+
+        if ($pId) {
+            $product = $this->em->getRepository(Product::class)->find($pId);
+            
+            if (!$product) {
+                return $this->json(['error' => 'Produit parent introuvable'], 404);
+            }
+            
+            $variant->setProduct($product);
+
+            // --- 1. LOGIQUE PRIX (HÉRITAGE) ---
+            // Si le front envoie un prix, on l'utilise. Sinon, on prend celui du parent.
+            if (!empty($data['price'])) {
+                $variant->setPrice($data['price']);
+            } else {
+                $variant->setPrice($product->getPrice());
+            }
+
+            // --- 2. LOGIQUE POIDS (HÉRITAGE) ---
+            // Si le front envoie un poids non nul, on l'utilise. Sinon, on prend celui du parent.
+            // On utilise !empty pour éviter que "0" ou "" ne bloque l'héritage si nécessaire, 
+            // mais attention si le poids 0 est une valeur valide, il vaudrait mieux utiliser is_numeric check.
+            if (isset($data['weight']) && $data['weight'] !== '' && $data['weight'] !== null) {
+                $variant->setWeight((float)$data['weight']);
+            } else {
+                $variant->setWeight($product->getWeight());
+            }
+
+        } else {
+            return $this->json(['error' => 'L\'ID du produit parent est requis'], 400);
         }
 
         $this->em->persist($variant);
         $this->em->flush();
 
-        return $this->json(['message' => 'Variant created', 'id' => $variant->getId()], 201);
+        return $this->json($this->serializeVariant($variant), 201);
     }
 
     /**
@@ -86,7 +118,7 @@ class ProductVariantController extends AbstractController
      * URL: /api/variants/{id}
      * Description: Update an variant.
      **/
-    #[Route('/{id}', methods: ['PUT'])]
+    #[Route('/{id}', methods: ['PUT', 'PATCH'])]
     public function update(Request $request, ProductVariant $variant): JsonResponse
     {
         $data = json_decode($request->getContent(), true);

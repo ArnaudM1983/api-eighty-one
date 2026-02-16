@@ -54,5 +54,62 @@ class OrderRepository extends ServiceEntityRepository
             ->getResult();
     }
 
-    // Tu peux ajouter d'autres méthodes personnalisées ici
+    /**
+     * Calcule le CA des commandes payées depuis le 1er du mois
+     */
+    public function getRevenueSince(\DateTimeInterface $date): float
+    {
+        $result = $this->createQueryBuilder('o')
+            ->select('SUM(o.total)')
+            ->where('o.createdAt >= :date')
+            ->setParameter('date', $date)
+            ->getQuery()
+            ->getSingleScalarResult();
+
+        // Si le résultat est null (pas de commandes), on retourne 0.0
+        return (float) ($result ?? 0.0);
+    }
+
+    /**
+     * Compte le nombre de commandes depuis le 1er du mois
+     */
+    public function countSince(\DateTimeInterface $date): int
+    {
+        return (int) $this->createQueryBuilder('o')
+            ->select('COUNT(o.id)')
+            ->where('o.createdAt >= :date')
+            ->setParameter('date', $date)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
+    /**
+     * Calcule le CA entre deux dates précises
+     */
+    public function getRevenueBetween(\DateTime $start, \DateTime $end): ?float
+    {
+        return (float) $this->createQueryBuilder('o')
+            ->select('SUM(o.total)')
+            ->where('o.createdAt BETWEEN :start AND :end')
+            ->setParameter('start', $start)
+            ->setParameter('end', $end)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
+    /**
+     * Compte le nombre de commandes entre deux dates précises
+     */
+    public function countBetween(\DateTime $start, \DateTime $end): ?int
+    {
+        return (int) $this->createQueryBuilder('o')
+            ->select('COUNT(o.id)')
+            ->where('o.createdAt BETWEEN :start AND :end')
+            ->setParameter('start', $start)
+            ->setParameter('end', $end)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
+    // Ajout d'autres méthodes personnalisées ici
 }

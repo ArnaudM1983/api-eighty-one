@@ -1,0 +1,145 @@
+{# templates/emails/admin_order_notification.html.twig #}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: 'Arial', sans-serif; color: #222; line-height: 1.4; background-color: #f4f4f4; margin: 0; padding: 20px; }
+        .container { max-width: 650px; margin: 0 auto; background: #ffffff; padding: 20px; border: 2px solid #e0e0e0; }
+        .header { background: #000; color: #fff; padding: 15px; text-align: center; margin-bottom: 20px; }
+        .badge { display: inline-block; padding: 5px 10px; border-radius: 4px; font-weight: bold; font-size: 12px; text-transform: uppercase; }
+        .badge-relay { background: #e3f2fd; color: #0d47a1; } 
+        .badge-home { background: #f3e5f5; color: #4a148c; }
+        .badge-pickup { background: #e8f5e9; color: #2e7d32; }
+        .section-title { font-size: 14px; font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #eee; padding-bottom: 5px; margin: 20px 0 10px 0; color: #555; }
+        .logistics-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        .logistics-table th { text-align: left; background: #333; color: #fff; padding: 8px; font-size: 12px; }
+        .logistics-table td { padding: 10px; border: 1px solid #eee; font-size: 14px; vertical-align: middle; }
+        .img-cell { width: 50px; text-align: center; }
+        .product-img { width: 50px; height: 50px; object-fit: cover; border-radius: 4px; border: 1px solid #ddd; display: block; }
+        .qty-cell { font-weight: bold; font-size: 18px; color: #d32f2f; background: #fff5f5; text-align: center; width: 40px; border: 2px solid #d32f2f !important; }
+        .info-box { background: #fafafa; padding: 15px; border: 1px solid #eee; margin-bottom: 10px; }
+        .footer { text-align: center; font-size: 12px; color: #999; margin-top: 30px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2 style="margin:0;">NOUVELLE COMMANDE #{{ order.id }}</h2>
+            <p style="margin:5px 0 0 0; font-size: 13px;">Reçue le {{ "now"|date("d/m/Y H:i") }}</p>
+        </div>
+
+        {# 1. Statut de Paiement #}
+        {% if order.status == 'paid' %}
+            <div style="background: #e8f5e9; color: #2e7d32; padding: 10px; text-align: center; font-weight: bold; border: 1px solid #2e7d32; margin-bottom: 20px;">
+                ✅ PAIEMENT DÉJÀ VALIDÉ (STRIPE/PAYPAL)
+            </div>
+        {% elseif order.shippingMethod == 'pickup' %}
+            <div style="background: #fff3e0; color: #e65100; padding: 10px; text-align: center; font-weight: bold; border: 1px solid #e65100; margin-bottom: 20px;">
+                ⚠️ À PAYER EN BOUTIQUE ({{ order.total|number_format(2, ',', ' ') }} €)
+            </div>
+        {% endif %}
+
+        <div class="section-title">📦 À PRÉPARER</div>
+        <table class="logistics-table">
+            <thead>
+                <tr>
+                    <th style="width: 50px;">Image</th>
+                    <th>Désignation</th>
+                    <th style="text-align: center;">Qté</th>
+                    <th style="text-align: right;">Prix Unit.</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in order.items %}
+                    <tr>
+                        <td class="img-cell">
+                            {% set thumb = null %}
+                            {% if item.variant and item.variant.image %}
+                                {% set thumb = item.variant.image %}
+                            {% elseif item.product.mainImage %}
+                                {% set thumb = item.product.mainImage %}
+                            {% endif %}
+
+                            {% if thumb %}
+                                {% set base = backend_url|default('https://api-eighty-one.explorelyon.ovh')|trim('/') %}
+                                {% set fullImageUrl = thumb starts with 'http' ? thumb : base ~ '/' ~ thumb|trim('/') %}
+                                <img src="{{ fullImageUrl }}" class="product-img" alt="Produit">
+                            {% else %}
+                                <div style="width:50px; height:50px; background:#eee; line-height:50px; color:#aaa; font-size:10px;">N/A</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <strong>{{ item.product.name|default('Produit sans nom') }}</strong>
+                            {% if item.variant %}
+                                <br><small style="color: #666;">{{ item.variant.name }}</small>
+                            {% endif %}
+                        </td>
+                        <td class="qty-cell">{{ item.quantity }}</td>
+                        <td style="text-align: right; font-weight: bold;">{{ item.price|number_format(2, ',', ' ') }} €</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        {# 2. LOGISTIQUE #}
+        {% if order.shippingMethod != 'pickup' %}
+            <div class="section-title">🚚 LIVRAISON</div>
+            <div class="info-box">
+                {% if order.shippingInfo is defined and order.shippingInfo is not null %}
+                    {% if order.shippingInfo.pudoId is not empty %}
+                        <span class="badge badge-relay">Point Relais ({{ order.shippingMethod }})</span>
+                        <p style="margin-top:10px;">
+                            <strong>ID Relais : {{ order.shippingInfo.pudoId }}</strong><br>
+                            <strong>{{ order.shippingInfo.pudoName }}</strong><br>
+                            {{ order.shippingInfo.pudoAddress }}<br>
+                            {{ order.shippingInfo.pudoPostalCode }} {{ order.shippingInfo.pudoCity }}
+                        </p>
+                    {% else %}
+                        <span class="badge badge-home">Domicile ({{ order.shippingMethod }})</span>
+                        <p style="margin-top:10px;">
+                            <strong>{{ order.shippingInfo.firstName }} {{ order.shippingInfo.lastName }}</strong><br>
+                            {{ order.shippingInfo.address }}<br>
+                            {{ order.shippingInfo.postalCode }} {{ order.shippingInfo.city }}
+                        </p>
+                    {% endif %}
+                {% else %}
+                    <p style="color:red;">⚠️ Infos de livraison manquantes en BDD !</p>
+                {% endif %}
+            </div>
+        {% else %}
+            <div class="section-title">🏪 MODE DE RETRAIT</div>
+            <div class="info-box">
+                <span class="badge badge-pickup">RETRAIT EN BOUTIQUE</span>
+                <p style="margin-top:10px; color: #2e7d32;">
+                    <strong>Retrait client prévu en magasin. Ne pas expédier.</strong>
+                </p>
+            </div>
+        {% endif %}
+
+        <div class="section-title">👤 CONTACT CLIENT</div>
+        <div class="info-box">
+            {% if order.shippingInfo is defined and order.shippingInfo is not null %}
+                Nom : <strong>{{ order.shippingInfo.lastName|upper }} {{ order.shippingInfo.firstName }}</strong><br>
+                Email : <a href="mailto:{{ order.shippingInfo.email }}">{{ order.shippingInfo.email }}</a><br>
+                Tel : <strong>{{ order.shippingInfo.phone|default('N/A') }}</strong>
+            {% else %}
+                Données client indisponibles.
+            {% endif %}
+        </div>
+
+        <div class="section-title">💰 FINANCIER</div>
+        <div class="info-box">
+            Total Commande : <strong>{{ order.total|number_format(2, ',', ' ') }} €</strong><br>
+            Frais de port : {{ order.shippingCost|number_format(2, ',', ' ') }} €
+        </div>
+
+        <div style="margin-top: 30px; text-align: center;">
+            <a href="https://eightyonestore.com/admin/orders/{{ order.id }}" 
+               style="background: #000; color: #fff; padding: 12px 25px; text-decoration: none; font-weight: bold; border-radius: 4px; display: inline-block;">
+                VOIR DANS LE BACK-OFFICE
+            </a>
+        </div>
+    </div>
+</body>
+</html>

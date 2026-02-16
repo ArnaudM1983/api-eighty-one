@@ -12,6 +12,7 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Annotation\Route;
+use Doctrine\ORM\Tools\Pagination\Paginator;
 
 #[Route('/api/products')]
 class ProductController extends AbstractController
@@ -27,24 +28,58 @@ class ProductController extends AbstractController
 
     /**
      * CRUD: Read (List)
-     * HTTP Method: GET
-     * URL: /api/products
-     * Description: Retrieve all products with categories, images, and variants.
-     **/
+     */
     #[Route('', methods: ['GET'])]
-    public function getAll(): JsonResponse
+    public function getAll(Request $request): JsonResponse
     {
-        $products = $this->repo->findAll();
-        $data = array_map(fn(Product $p) => $this->serializeProduct($p), $products);
+        $qb = $this->repo->createQueryBuilder('p')
+            ->leftJoin('p.variants', 'v')
+            ->addSelect('v');
 
-        return $this->json($data);
+        if ($request->query->get('featured') === 'true') {
+            $qb->andWhere('p.featured = :featured')
+                ->setParameter('featured', true);
+        }
+
+        if ($q = $request->query->get('q')) {
+            $keywords = array_filter(explode(' ', $q));
+            foreach ($keywords as $index => $word) {
+                $parameterName = 'q' . $index;
+                $qb->andWhere('
+                    p.name LIKE :' . $parameterName . ' OR 
+                    p.sku LIKE :' . $parameterName . ' OR 
+                    v.name LIKE :' . $parameterName . ' OR 
+                    v.sku LIKE :' . $parameterName . '
+                ')
+                    ->setParameter($parameterName, '%' . $word . '%');
+            }
+        }
+
+        $page = (int) $request->query->get('_page', 1);
+        $limit = (int) $request->query->get('_limit', 20);
+        $offset = ($page - 1) * $limit;
+
+        $qb->orderBy('p.id', 'DESC')
+            ->setFirstResult($offset)
+            ->setMaxResults($limit);
+
+        $paginator = new Paginator($qb, true);
+        $total = count($paginator);
+
+        $products = [];
+        foreach ($paginator as $product) {
+            $products[] = $this->serializeProduct($product);
+        }
+
+        return $this->json($products, 200, [
+            'x-total-count' => (string)$total,
+            'Access-Control-Expose-Headers' => 'x-total-count'
+        ]);
     }
 
     /**
-     * CRUD: Search products by name
-     * HTTP Method: GET
-     * URL: /api/products/search?q=terme
-     **/
+     * CRUD: Search
+     */
     #[Route('/search', methods: ['GET'])]
     public function search(Request $request): JsonResponse
     {
@@ -66,11 +101,8 @@ class ProductController extends AbstractController
     }
 
     /**
-     * CRUD: Read (Detail)
-     * HTTP Method: GET
-     * URL: /api/products/{id}
-     * Description: Retrieve details of a specific product with categories, images, and variants.
-     **/
+     * CRUD: Get One by ID
+     */
     #[Route('/{id}', methods: ['GET'])]
     public function getOne(Product $product): JsonResponse
     {
@@ -78,11 +110,8 @@ class ProductController extends AbstractController
     }
 
     /**
-     * CRUD: Read (Detail)
-     * HTTP Method: GET
-     * URL: /api/products/{id}
-     * Description: Retrieve details of a specific product with categories, images, and variants.
-     **/
+     * CRUD: Get One by Slug
+     */
     #[Route('/slug/{slug}', methods: ['GET'])]
     public function getBySlug(string $slug): JsonResponse
     {
@@ -98,10 +127,7 @@ class ProductController extends AbstractController
 
     /**
      * CRUD: Create
-     * HTTP Method: POST
-     * URL: /api/products
-     * Description: Create a new product with optional categories and images.
-     **/
+     */
     #[Route('', methods: ['POST'])]
     public function create(Request $request): JsonResponse
     {
@@ -115,14 +141,8 @@ class ProductController extends AbstractController
         $product->setSku($data['sku'] ?? null);
         $product->setPrice($data['price'] ?? null);
         $product->setStock($data['stock'] ?? null);
+        $product->setWeight(isset($data['weight']) ? (float)$data['weight'] : null);
         $product->setFeatured($data['featured'] ?? false);
-        // --------------------------------------------------
-        // TODO: Stockage local pour main_image
-        // Stockage des images sur le serveur local,
-        // remplacer le champ 'main_image' par un upload via FileType ou multipart/form-data,
-        // déplacer le fichier dans /public/uploads/products/ et stocker l'URL relative ici :
-        // $product->setMainImage('/uploads/products/'.$newFilename);
-        // --------------------------------------------------
         $product->setMainImage($data['main_image'] ?? null);
 
         // Categories
@@ -132,18 +152,21 @@ class ProductController extends AbstractController
         }
 
         // Images
-        // --------------------------------------------------
-        // TODO: Stockage local pour images supplémentaires
-        // Pour chaque image :
-        // 1. Recevoir un fichier via FileType / multipart/form-data
-        // 2. Déplacer le fichier dans /public/uploads/products/
-        // 3. Stocker l'URL relative dans $image->setUrl('/uploads/products/'.$newFilename)
-        // --------------------------------------------------
         foreach ($data['images'] ?? [] as $imgData) {
             $image = new ProductImage();
             $image->setUrl($imgData['url']);
             $image->setAlt($imgData['alt'] ?? null);
             $product->addImage($image);
+        }
+
+        // --- NOUVEAU : Produits Associés à la création ---
+        if (isset($data['related_product_ids']) && is_array($data['related_product_ids'])) {
+            foreach ($data['related_product_ids'] as $relatedId) {
+                $relatedProd = $this->repo->find($relatedId);
+                if ($relatedProd) {
+                    $product->addRelatedProduct($relatedProd);
+                }
+            }
         }
 
         $this->em->persist($product);
@@ -152,69 +175,91 @@ class ProductController extends AbstractController
         return $this->json(['message' => 'Product created', 'id' => $product->getId()], 201);
     }
 
+
     /**
      * CRUD: Update
-     * HTTP Method: PUT
-     * URL: /api/products/{id}
-     * Description: Update an existing product with optional categories and images.
-     **/
+     */
     #[Route('/{id}', methods: ['PUT'])]
     public function update(Request $request, Product $product): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
 
+        // Mise à jour des champs basiques
         if (isset($data['name'])) $product->setName($data['name']);
         if (isset($data['slug'])) $product->setSlug($data['slug']);
         if (isset($data['description'])) $product->setDescription($data['description']);
         if (isset($data['excerpt'])) $product->setExcerpt($data['excerpt']);
         if (isset($data['sku'])) $product->setSku($data['sku']);
-        if (isset($data['price'])) $product->setPrice($data['price']);
+        if (isset($data['price'])) {
+            $newPrice = $data['price'];
+            $product->setPrice($newPrice);
+            // SYNCHRONISATION DES VARIANTES
+            foreach ($product->getVariants() as $variant) {
+                $variant->setPrice($newPrice);
+            }
+        }
         if (isset($data['stock'])) $product->setStock($data['stock']);
+        if (isset($data['weight'])) $product->setWeight($data['weight']);
         if (isset($data['featured'])) $product->setFeatured($data['featured']);
-        // --------------------------------------------------
-        // TODO: Update stockage local pour main_image
-        // Remplacer 'main_image' par l'upload local si nécessaire
-        // --------------------------------------------------
         if (isset($data['main_image'])) $product->setMainImage($data['main_image']);
 
-        // Update categories
+        // Update des catégories
         if (isset($data['category_ids'])) {
-            $product->getCategories()->clear();
+            foreach ($product->getCategories() as $category) {
+                $product->removeCategory($category);
+            }
             foreach ($data['category_ids'] as $catId) {
                 $category = $this->em->getRepository(Category::class)->find($catId);
-                if ($category) $product->addCategory($category);
+                if ($category) {
+                    $product->addCategory($category);
+                }
             }
         }
 
-        // Update images
-        // --------------------------------------------------
-        // TODO: Update stockage local pour images supplémentaires
-        // Supprimer les images existantes si nécessaire
-        // Puis uploader les nouveaux fichiers dans /public/uploads/products/
-        // et stocker les URLs relatives
-        // --------------------------------------------------
+        // Update des images
         if (isset($data['images'])) {
-            $product->getImages()->clear();
+            $currentImages = $product->getImages();
+            foreach ($currentImages as $image) {
+                $product->removeImage($image);
+            }
             foreach ($data['images'] as $imgData) {
-                $image = new ProductImage();
-                $image->setUrl($imgData['url']);
-                $image->setAlt($imgData['alt'] ?? null);
-                $product->addImage($image);
+                if (!empty($imgData['url'])) {
+                    $newImage = new ProductImage();
+                    $url = ltrim($imgData['url'], '/');
+                    $newImage->setUrl($url);
+                    $newImage->setAlt($product->getName());
+                    $product->addImage($newImage);
+                }
+            }
+        }
+
+        // --- NOUVEAU : Update des Produits Associés ---
+        if (isset($data['related_product_ids']) && is_array($data['related_product_ids'])) {
+            // 1. On nettoie les anciennes relations
+            foreach ($product->getRelatedProducts() as $related) {
+                $product->removeRelatedProduct($related);
+            }
+
+            // 2. On ajoute les nouvelles
+            foreach ($data['related_product_ids'] as $relatedId) {
+                $relatedProd = $this->repo->find($relatedId);
+                // On s'assure que le produit existe et qu'on ne lie pas le produit à lui-même
+                if ($relatedProd && $relatedProd->getId() !== $product->getId()) {
+                    $product->addRelatedProduct($relatedProd);
+                }
             }
         }
 
         $product->setUpdatedAt(new \DateTimeImmutable());
+
         $this->em->flush();
 
-        return $this->json(['message' => 'Product updated']);
+        return $this->json($this->serializeProduct($product));
     }
 
     /**
      * CRUD: Delete
-     * HTTP Method: DELETE
-     * URL: /api/products/{id}
-     * Description: Delete an existing product along with its categories and images associations.
-     **/
+     */
     #[Route('/{id}', methods: ['DELETE'])]
     public function delete(Product $product): JsonResponse
     {
@@ -225,10 +270,8 @@ class ProductController extends AbstractController
     }
 
     /**
-     * HTTP Method: GET
-     * URL: /api/products/category/{slug}
-     * Description: Retrieve all parent products of a category (no variants).
-     **/
+     * Get by Category
+     */
     #[Route('/category/{slug}', methods: ['GET'])]
     public function getByCategory(string $slug, CategoryRepository $categoryRepo): JsonResponse
     {
@@ -239,28 +282,75 @@ class ProductController extends AbstractController
         }
 
         $products = $this->repo->findByCategory($category);
-
-        // Use the NEW serializer without variants
         $data = array_map(fn(Product $p) => $this->serializeProductWithoutVariants($p), $products);
 
         return $this->json($data);
     }
 
     /**
-     * HTTP Method: GET
-     * URL: /api/products/{id}/stock
-     * Description: Retrieve the current stock of a product.
-     **/
+     * Get Stock
+     */
     #[Route('/{id}/stock', methods: ['GET'])]
     public function getStock(Product $product): JsonResponse
     {
-        return $this->json([
-            'stock' => $product->getStock()
-        ]);
+        return $this->json(['stock' => $product->getStock()]);
     }
 
+    /**
+     * Update Stock
+     */
+    #[Route('/{id}', methods: ['PATCH'])]
+    public function updateStock(Request $request, Product $product): JsonResponse
+    {
+        $data = json_decode($request->getContent(), true);
+
+        if (isset($data['stock'])) {
+            $product->setStock((int) $data['stock']);
+            $product->setUpdatedAt(new \DateTimeImmutable());
+            $this->em->flush();
+
+            return $this->json(['message' => 'Stock mis à jour avec succès', 'stock' => $product->getStock()]);
+        }
+
+        return $this->json(['error' => 'Donnée de stock manquante'], 400);
+    }
+
+    /**
+     * Reorder
+     */
+    #[Route('/reorder', methods: ['POST'])]
+    public function reorder(Request $request): JsonResponse
+    {
+        $data = json_decode($request->getContent(), true);
+
+        if (!isset($data['products']) || !is_array($data['products'])) {
+            return $this->json(['error' => 'Invalid data'], 400);
+        }
+
+        foreach ($data['products'] as $item) {
+            $product = $this->repo->find($item['id']);
+            if ($product) {
+                $product->setPosition((int) $item['position']);
+            }
+        }
+
+        $this->em->flush();
+
+        return $this->json(['message' => 'Order updated successfully']);
+    }
+
+    // Serializer Léger (pour les listes)
     private function serializeProductWithoutVariants(Product $product): array
     {
+        $variants = $product->getVariants();
+        $totalStock = $product->getStock();
+
+        if ($variants->count() > 0) {
+            $totalStock = 0;
+            foreach ($variants as $v) {
+                $totalStock += $v->getStock();
+            }
+        }
         return [
             'id' => $product->getId(),
             'name' => $product->getName(),
@@ -269,21 +359,30 @@ class ProductController extends AbstractController
             'excerpt' => $product->getExcerpt(),
             'sku' => $product->getSku(),
             'price' => $product->getPrice(),
-            'stock' => $product->getStock(),
+            'stock' => $totalStock,
             'weight' => $product->getWeight(),
             'featured' => $product->isFeatured(),
             'main_image' => $product->getMainImage(),
             'created_at' => $product->getCreatedAt()?->format('Y-m-d H:i:s'),
             'updated_at' => $product->getUpdatedAt()?->format('Y-m-d H:i:s'),
+            'has_variants' => $product->getVariants()->count() > 0,
         ];
     }
 
+    // Serializer Complet (pour le détail)
     private function serializeProduct(Product $p): array
     {
         $formatImagePath = fn(?string $path) => $path ? '/' . ltrim($path, '/') : null;
 
         $variants = $p->getVariants()->toArray();
-        $variantCount = count($variants);
+        $totalStock = $p->getStock();
+
+        if (count($variants) > 0) {
+            $totalStock = 0;
+            foreach ($variants as $v) {
+                $totalStock += $v->getStock();
+            }
+        }
 
         return [
             'id' => $p->getId(),
@@ -293,7 +392,6 @@ class ProductController extends AbstractController
             'excerpt' => $p->getExcerpt(),
             'sku' => $p->getSku(),
             'price' => $p->getPrice(),
-            'stock' => $p->getStock(),
             'weight' => $p->getWeight(),
             'featured' => $p->isFeatured(),
             'main_image' => $formatImagePath($p->getMainImage()),
@@ -318,8 +416,17 @@ class ProductController extends AbstractController
                 'image' => $formatImagePath($v->getImage()),
                 'attributes' => $v->getAttributes()
             ], $variants),
-            'variant_count' => $variantCount,
-            'has_variants' => $variantCount > 0,
+            'stock' => $totalStock,
+            'has_variants' => count($variants) > 0,
+
+            // --- NOUVEAU : Sérialisation des produits liés ---
+            'related_products' => $p->getRelatedProducts()->map(fn($rp) => [
+                'id' => $rp->getId(),
+                'name' => $rp->getName(),
+                'price' => $rp->getPrice(),
+                'main_image' => $formatImagePath($rp->getMainImage()),
+                'slug' => $rp->getSlug(),
+            ])->toArray(),
         ];
     }
 }

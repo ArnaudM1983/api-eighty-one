@@ -1,6 +1,9 @@
 twig:
     file_name_pattern: '*.twig'
 
+    globals:
+        backend_url: '%env(API_URL)%'
+
 when@test:
     twig:
         strict_variables: true

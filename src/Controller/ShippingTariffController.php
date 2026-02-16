@@ -22,26 +22,22 @@ class ShippingTariffController extends AbstractController
         private ShippingTariffRepository $shippingTariffRepository
     ) {}
 
-    // --- LECTURE (READ : GET /api/shipping_tariffs) ---
     /**
      * Liste tous les tarifs de la grille.
      */
     #[Route('', name: 'api_shipping_tariff_index', methods: ['GET'])]
     public function index(): JsonResponse
     {
-        // Récupère toutes les entrées, triées par pays, mode et poids pour la lisibilité
         $tariffs = $this->shippingTariffRepository->findBy([], [
             'countryCode' => 'ASC', 
             'modeCode' => 'ASC', 
             'weightMaxG' => 'ASC'
         ]);
 
-        return $this->json($tariffs, 200, [], [
-            'groups' => ['tariff:read'], 
-        ]);
+        // Suppression du contexte 'groups'. Symfony va normaliser tous les champs publics/getters par défaut.
+        return $this->json($tariffs);
     }
 
-    // --- CRÉATION (CREATE : POST /api/shipping_tariffs) ---
     /**
      * Crée un nouveau palier tarifaire.
      */
@@ -49,7 +45,6 @@ class ShippingTariffController extends AbstractController
     public function new(Request $request): JsonResponse
     {
         try {
-            /** @var ShippingTariff $tariff */
             $tariff = $this->serializer->deserialize(
                 $request->getContent(), 
                 ShippingTariff::class, 
@@ -71,10 +66,9 @@ class ShippingTariffController extends AbstractController
         $this->em->persist($tariff);
         $this->em->flush();
 
-        return $this->json($tariff, 201, [], ['groups' => ['tariff:read']]);
+        return $this->json($tariff, 201);
     }
 
-    // --- MISE À JOUR (UPDATE : PUT /api/shipping_tariffs/{id}) ---
     /**
      * Met à jour un palier tarifaire existant.
      */
@@ -88,7 +82,7 @@ class ShippingTariffController extends AbstractController
                 'json', 
                 [
                     'object_to_populate' => $tariff,
-                    'groups' => ['tariff:read'],
+                    // Suppression du contexte 'groups' ici aussi
                 ]
             );
         } catch (\Exception $e) {
@@ -106,10 +100,9 @@ class ShippingTariffController extends AbstractController
 
         $this->em->flush();
 
-        return $this->json($tariff, 200, [], ['groups' => ['tariff:read']]);
+        return $this->json($tariff);
     }
 
-    // --- SUPPRESSION (DELETE : DELETE /api/shipping_tariffs/{id}) ---
     /**
      * Supprime un palier tarifaire.
      */

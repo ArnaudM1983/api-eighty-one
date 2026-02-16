@@ -45,6 +45,9 @@ class Product
     #[ORM\Column(type: 'boolean')]
     private bool $featured = false;
 
+    #[ORM\Column(type: 'integer', options: ['default' => 0])]
+    private ?int $position = 0;
+
     #[ORM\Column(type: 'datetime')]
     private \DateTimeInterface $createdAt;
 
@@ -54,30 +57,34 @@ class Product
     #[ORM\OneToMany(mappedBy: 'product', targetEntity: ProductVariant::class, cascade: ['persist', 'remove'])]
     private Collection $variants;
 
-    #[ORM\OneToMany(mappedBy: 'product', targetEntity: ProductImage::class, cascade: ['persist', 'remove'])]
+    #[ORM\OneToMany(mappedBy: 'product', targetEntity: ProductImage::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
     private Collection $images;
 
     #[ORM\ManyToMany(targetEntity: Category::class, inversedBy: 'products')]
     private Collection $categories;
+
+    // --- NOUVEAU : Produits Associés (Cross-Sell) ---
+    #[ORM\ManyToMany(targetEntity: self::class)]
+    #[ORM\JoinTable(name: 'product_related')]
+    private Collection $relatedProducts;
 
     public function __construct()
     {
         $this->variants = new ArrayCollection();
         $this->images = new ArrayCollection();
         $this->categories = new ArrayCollection();
+        $this->relatedProducts = new ArrayCollection(); // Initialisation
         $this->createdAt = new \DateTimeImmutable();
         $this->updatedAt = new \DateTimeImmutable();
     }
 
     // Getters & Setters
 
-    // ID
     public function getId(): ?int
     {
         return $this->id;
     }
 
-    // Name
     public function getName(): ?string
     {
         return $this->name;
@@ -89,7 +96,6 @@ class Product
         return $this;
     }
 
-    // Slug
     public function getSlug(): ?string
     {
         return $this->slug;
@@ -101,7 +107,6 @@ class Product
         return $this;
     }
 
-    // Description
     public function getDescription(): ?string
     {
         return $this->description;
@@ -113,7 +118,6 @@ class Product
         return $this;
     }
 
-    // Excerpt
     public function getExcerpt(): ?string
     {
         return $this->excerpt;
@@ -125,7 +129,6 @@ class Product
         return $this;
     }
 
-    // SKU
     public function getSku(): ?string
     {
         return $this->sku;
@@ -137,7 +140,6 @@ class Product
         return $this;
     }
 
-    // Price
     public function getPrice(): ?string
     {
         return $this->price;
@@ -149,7 +151,6 @@ class Product
         return $this;
     }
 
-    // Stock
     public function getStock(): ?int
     {
         return $this->stock;
@@ -161,7 +162,6 @@ class Product
         return $this;
     }
 
-    // Weight
     public function getWeight(): ?float
     {
         return $this->weight;
@@ -173,7 +173,6 @@ class Product
         return $this;
     }
 
-    // Main Image
     public function getMainImage(): ?string
     {
         return $this->mainImage;
@@ -185,7 +184,6 @@ class Product
         return $this;
     }
 
-    // CreatedAt
     public function getCreatedAt(): \DateTimeInterface
     {
         return $this->createdAt;
@@ -197,7 +195,6 @@ class Product
         return $this;
     }
 
-    // UpdatedAt
     public function getUpdatedAt(): \DateTimeInterface
     {
         return $this->updatedAt;
@@ -209,7 +206,6 @@ class Product
         return $this;
     }
 
-    // Best Sellers  – Boolean true/false - This will be a toggle in the back office
     public function isFeatured(): bool
     {
         return $this->featured;
@@ -222,9 +218,7 @@ class Product
     }
 
     // Variants
-    /**
-     * @return Collection|ProductVariant[]
-     */
+    /** @return Collection|ProductVariant[] */
     public function getVariants(): Collection
     {
         return $this->variants;
@@ -250,9 +244,7 @@ class Product
     }
 
     // Images
-    /**
-     * @return Collection|ProductImage[]
-     */
+    /** @return Collection|ProductImage[] */
     public function getImages(): Collection
     {
         return $this->images;
@@ -278,9 +270,7 @@ class Product
     }
 
     // Categories
-    /**
-     * @return Collection|Category[]
-     */
+    /** @return Collection|Category[] */
     public function getCategories(): Collection
     {
         return $this->categories;
@@ -300,6 +290,40 @@ class Product
         if ($this->categories->removeElement($category)) {
             $category->removeProduct($this);
         }
+        return $this;
+    }
+
+    // Position
+    public function getPosition(): ?int
+    {
+        return $this->position;
+    }
+
+    public function setPosition(int $position): self
+    {
+        $this->position = $position;
+        return $this;
+    }
+
+    // --- METHODES NOUVELLES : GESTION DES PRODUITS ASSOCIÉS ---
+
+    /** @return Collection|self[] */
+    public function getRelatedProducts(): Collection
+    {
+        return $this->relatedProducts;
+    }
+
+    public function addRelatedProduct(self $product): self
+    {
+        if (!$this->relatedProducts->contains($product)) {
+            $this->relatedProducts[] = $product;
+        }
+        return $this;
+    }
+
+    public function removeRelatedProduct(self $product): self
+    {
+        $this->relatedProducts->removeElement($product);
         return $this;
     }
 }

@@ -1,0 +1,110 @@
+{# templates/emails/order_confirmation.html.twig #}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: 'Helvetica', Arial, sans-serif; color: #333; line-height: 1.5; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #f0f0f0; }
+        .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 20px; margin-bottom: 20px; }
+        .table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        .table th { text-align: left; background: #f8f8f8; padding: 10px; font-size: 11px; border-bottom: 1px solid #eee; }
+        .table td { padding: 10px; border-bottom: 1px solid #eee; font-size: 14px; }
+        .total-box { text-align: right; padding: 10px; background: #fafafa; }
+        
+        /* Styles pour les adresses */
+        .address-section { margin-top: 30px; display: table; width: 100%; }
+        .address-column { display: table-cell; width: 50%; padding: 15px; background: #f9f9f9; border: 1px solid #eee; vertical-align: top; }
+        .address-header { font-weight: bold; text-transform: uppercase; font-size: 12px; margin-bottom: 10px; display: block; border-bottom: 1px solid #ccc; }
+        
+        .footer { text-align: center; font-size: 11px; color: #999; margin-top: 40px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 style="margin:0;">EIGHTY ONE STORE</h1>
+            <p style="text-transform: uppercase; font-size: 12px; letter-spacing: 1px;">Confirmation de commande #{{ order.id }}</p>
+        </div>
+
+        <p>Bonjour {{ order.shippingInfo.firstName }},</p>
+        <p>Merci pour votre commande ! Votre paiement a été validé et nous préparons vos articles.</p>
+
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Désignation</th>
+                    <th style="text-align: center;">Qté</th>
+                    <th style="text-align: right;">Prix</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in order.items %}
+                    <tr>
+                        <td>
+                            <strong>{{ item.product.name }}</strong>
+                            {% if item.variant %}
+                                <br><small style="color: #666;">{{ item.variant.name }}</small>
+                            {% endif %}
+                        </td>
+                        <td style="text-align: center;">{{ item.quantity }}</td>
+                        <td style="text-align: right;">{{ item.totalPrice|number_format(2, ',', ' ') }} €</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="total-box">
+            <p style="margin: 5px 0;">Sous-total : {{ order.subTotal|number_format(2, ',', ' ') }} €</p>
+            {% if order.shippingCost > 0 %}
+                <p style="margin: 5px 0;">Livraison ({{ order.shippingMethod }}) : {{ order.shippingCost|number_format(2, ',', ' ') }} €</p>
+            {% endif %}
+            <p style="font-size: 18px; font-weight: bold; margin: 10px 0;">Total TTC : {{ order.total|number_format(2, ',', ' ') }} €</p>
+        </div>
+
+        <div class="address-section">
+            <div class="address-column">
+                <span class="address-header">Adresse de facturation</span>
+                {{ order.shippingInfo.firstName }} {{ order.shippingInfo.lastName }}<br>
+                {{ order.shippingInfo.address }}<br>
+                {{ order.shippingInfo.phone }}<br>
+                {{ order.shippingInfo.postalCode }} {{ order.shippingInfo.city }}<br>
+                {{ order.shippingInfo.country }}
+            </div>
+
+            <div class="address-column" style="border-left: 10px solid white;">
+                <span class="address-header">Mode de livraison</span>
+                
+                {% if order.shippingMethod == 'pickup' %}
+                    {# CAS RETRAIT BOUTIQUE #}
+                    <strong>Retrait en Boutique</strong><br>
+                    Eighty One Store<br>
+                    21 rue des Capucins<br>
+                    69001 Lyon
+                {% elseif order.shippingInfo.pudoId is not empty %}
+                    {# CAS POINT RELAIS #}
+                    <strong>Point Relais : {{ order.shippingInfo.pudoName }}</strong><br>
+                    {{ order.shippingInfo.pudoAddress }}<br>
+                    {{ order.shippingInfo.pudoPostalCode }} {{ order.shippingInfo.pudoCity }}
+                {% else %}
+                    {# CAS DOMICILE #}
+                    <strong>À domicile</strong><br>
+                    {{ order.shippingInfo.firstName }} {{ order.shippingInfo.lastName }}<br>
+                    {{ order.shippingInfo.address }}<br>
+                    {{ order.shippingInfo.postalCode }} {{ order.shippingInfo.city }}<br>
+                    {{ order.shippingInfo.country }}
+                {% endif %}
+            </div>
+        </div>
+
+        <p style="font-size: 13px; margin-top: 20px; clear: both;">
+            Dès que votre colis sera expédié, vous recevrez un nouvel email avec votre numéro de suivi.
+        </p>
+
+        <div class="footer">
+            Eighty One Store - 2026<br>
+            Ceci est un message automatique, merci de ne pas y répondre.
+        </div>
+    </div>
+</body>
+</html>

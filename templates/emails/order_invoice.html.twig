@@ -1,0 +1,114 @@
+{# templates/emails/order_invoice.html.twig #}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: 'Helvetica', Arial, sans-serif; color: #333; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; }
+        .header { display: table; width: 100%; border-bottom: 2px solid #000; padding-bottom: 20px; }
+        .col { display: table-cell; vertical-align: top; }
+        .table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        .table th { background: #f4f4f4; padding: 10px; text-align: left; font-size: 12px; }
+        .table td { padding: 10px; border-bottom: 1px solid #eee; font-size: 13px; }
+        .totals { float: right; width: 250px; margin-top: 20px; }
+        .totals div { display: flex; justify-content: space-between; padding: 5px 0; }
+        .footer { margin-top: 50px; text-align: center; font-size: 10px; color: #999; border-top: 1px solid #eee; padding-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="col">
+                <h2 style="margin:0;">FACTURE</h2>
+                <p style="font-size: 12px; color: #666;">
+                    N° : INV-{{ order.id }}<br>
+                    Date : {{ "now"|date("d/m/Y") }}
+                </p>
+            </div>
+            <div class="col" style="text-align: right; font-size: 12px;">
+                <strong>Eighty One Store</strong><br>
+                21 rue des Capucins<br>
+                69001 Lyon, France
+            </div>
+        </div>
+
+        <div style="margin-top: 30px; font-size: 13px;">
+            <strong>Destinataire :</strong><br>
+            {% if order.shippingInfo is defined and order.shippingInfo is not null %}
+                {{ order.shippingInfo.firstName|default('') }} {{ order.shippingInfo.lastName|default('') }}<br>
+                {{ order.shippingInfo.address|default('') }}<br>
+                {{ order.shippingInfo.phone|default('') }}<br>
+                {{ order.shippingInfo.postalCode|default('') }} {{ order.shippingInfo.city|default('') }}
+            {% else %}
+                Client non renseigné
+            {% endif %}
+        </div>
+
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Description</th>
+                    <th style="text-align: center;">Qté</th>
+                    <th style="text-align: right;">Total TTC</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in order.items %}
+                    <tr>
+                        <td>
+                            <strong>{{ item.product.name|default('Produit') }}</strong>
+                            {% if item.variant %}<br><small style="color:#777">{{ item.variant.name }}</small>{% endif %}
+                        </td>
+                        <td style="text-align: center;">{{ item.quantity }}</td>
+                        <td style="text-align: right;">{{ item.totalPrice|default(0)|number_format(2, ',', ' ') }} €</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="totals">
+            {% set total = order.total|default(0) %}
+            <div>
+                <span>Total HT :</span>
+                <span>{{ (total / 1.2)|number_format(2, ',', ' ') }} €</span>
+            </div>
+            <div>
+                <span>TVA (20%) :</span>
+                {# Sécurité : si totalTax n'est pas passé par le contrôleur, on le calcule #}
+                <span>{{ totalTax|default(total - (total / 1.2))|number_format(2, ',', ' ') }} €</span>
+            </div>
+            {% if order.shippingCost is defined and order.shippingCost > 0 %}
+            <div>
+                <span>Frais de port :</span>
+                <span>{{ order.shippingCost|number_format(2, ',', ' ') }} €</span>
+            </div>
+            {% endif %}
+            <div style="font-size: 18px; font-weight: bold; border-top: 1px solid #000; margin-top: 10px; padding-top: 10px;">
+                <span>TOTAL TTC :</span>
+                <span>{{ total|number_format(2, ',', ' ') }} €</span>
+            </div>
+        </div>
+
+        <div style="clear: both; margin-top: 40px; font-size: 12px; background: #f9f9f9; padding: 10px;">
+            <p style="margin: 0 0 5px 0;"><strong>Mode de paiement :</strong> 
+                {{ order.shippingMethod == 'pickup' ? 'Paiement en boutique' : 'Carte Bancaire / En ligne' }}
+            </p>
+            <p style="margin: 0;"><strong>Mode de livraison :</strong> 
+                {% if order.shippingMethod == 'pickup' %}
+                    Retrait en Boutique (Click & Collect)
+                {% elseif order.shippingInfo is defined and order.shippingInfo is not null and order.shippingInfo.pudoId is not empty %}
+                    Point Relais ({{ order.shippingMethod|default('Standard') }})
+                {% else %}
+                    Livraison à Domicile
+                {% endif %}
+            </p>
+        </div>
+
+        <div class="footer">
+            Eighty One Store - SARL au capital de 1000 € - RCS Lyon 123 456 789<br>
+            TVA Intracommunautaire : FR00123456789
+        </div>
+    </div>
+</body>
+</html>

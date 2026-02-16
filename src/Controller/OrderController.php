@@ -5,350 +5,495 @@ namespace App\Controller;
 use App\Entity\Order;
 use App\Entity\ShippingInfo;
 use App\Entity\OrderItem;
-use App\Entity\Payment;
 use App\Entity\Cart;
+use App\Entity\Payment;
+use App\Repository\OrderRepository;
+use App\Service\EmailService;
 use App\Service\TariffCalculatorService;
 use App\Service\MondialRelayService;
+use App\Service\ColissimoService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Annotation\Route;
-use Symfony\Component\Serializer\SerializerInterface;
-use Symfony\Component\Validator\Validator\ValidatorInterface;
+use App\Service\StockService;
+use Stripe\Stripe;            
+use Stripe\Refund;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 #[Route('/api/order')]
 class OrderController extends AbstractController
 {
-
     public function __construct(
         private EntityManagerInterface $em,
-        private SerializerInterface $serializer,
-        private ValidatorInterface $validator,
         private TariffCalculatorService $tariffCalculatorService,
-        private MondialRelayService $mondialRelayService
+        private MondialRelayService $mondialRelayService,
+        private ColissimoService $colissimoService,
+        private EmailService $emailService
     ) {}
 
     /**
-     * CRUD: Create Order
-     * HTTP Method: POST
-     * URL: /api/order/create
+     * CRUD: List all orders avec Pagination & Filtres
      */
-    #[Route('/create', name: 'api_order_create', methods: ['POST'])]
-    public function createOrder(Request $request, EntityManagerInterface $em): JsonResponse
+    #[Route('', name: 'api_order_list', methods: ['GET'])]
+    #[IsGranted('ROLE_ADMIN')]
+    public function listOrders(OrderRepository $repo, Request $request): JsonResponse
     {
-        $data = json_decode($request->getContent(), true);
-        $cartToken = $data['cartToken'] ?? null;
-        $cart = $em->getRepository(Cart::class)->findOneBy(['token' => $cartToken]);
+        $qb = $repo->createQueryBuilder('o')
+            ->orderBy('o.createdAt', 'DESC');
 
-        if (!$cart) {
-            return $this->json(['error' => 'Panier introuvable'], 404);
+        // 1. FILTRE : Recherche (Client ou ID)
+        if ($q = $request->query->get('q')) {
+            // On cherche dans les infos de shipping jointes
+            $qb->leftJoin('o.shippingInfo', 's')
+               ->andWhere('
+                   o.id LIKE :q OR 
+                   s.firstName LIKE :q OR 
+                   s.lastName LIKE :q OR
+                   s.email LIKE :q
+               ')
+               ->setParameter('q', '%' . $q . '%');
         }
 
-        $order = new Order();
-        $order->setCartToken($cartToken);
-        $order->setStatus('created');
-
-        try {
-            // Création des OrderItems à partir du panier (Items, Poids unitaire)
-            foreach ($cart->getItems() as $cartItem) {
-                // Vérification de sécurité critique: l'article est-il toujours valide?
-                if (!$cartItem->getProduct() || $cartItem->getQuantity() <= 0) {
-                    continue; // Ignore les items orphelins ou invalides
-                }
-
-                $orderItem = new OrderItem();
-                $orderItem->setProduct($cartItem->getProduct());
-                $orderItem->setVariant($cartItem->getVariant());
-                $orderItem->setQuantity($cartItem->getQuantity());
-                
-                // Assurez-vous que le prix et le poids ne sont pas nulls ici si la DB l'exige
-                $orderItem->setPrice($cartItem->getPrice() ?? '0.00'); 
-                $orderItem->setWeight($cartItem->getWeight() ?? 0.0); 
-                
-                $order->addItem($orderItem);
-            }
-
-            // Si la commande n'a finalement aucun article valide
-            if ($order->getItems()->isEmpty()) {
-                 return $this->json(['error' => 'Le panier ne contient aucun article valide pour la commande.'], 400);
-            }
-
-            // Stock le poids total
-            $order->setTotalWeight($cart->getTotalWeight() ?? 0.0);
-
-            // Initialiser le champ $total avec le sous-total
-            $order->setTotal($order->getSubTotal()); 
-
-            $em->persist($order);
-            $em->flush();
-
-            // Retour JSON de succès
-            return $this->json([
-                'success' => true,
-                'message' => 'Commande initiale créée',
-                'orderId' => $order->getId(),
-                'subTotal' => $order->getSubTotal(),
-                'total' => $order->getTotal(),
-                'totalWeight' => $order->getTotalWeight()
-            ]);
-
-        } catch (\Exception $e) {
-            // --- CATCHER L'ERREUR DE PERSISTANCE ET RENVOYER LE DÉTAIL ---
-            return $this->json([
-                'error' => 'Erreur serveur lors de la persistance de la commande.',
-                'details' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine()
-            ], 500); 
+        // 2. FILTRE : Statut
+        if ($status = $request->query->get('status')) {
+            $qb->andWhere('o.status = :status')
+               ->setParameter('status', $status);
         }
+
+        // 3. PAGINATION
+        // On clone pour compter le total avant d'appliquer la limite
+        $countQb = clone $qb;
+        $total = $countQb->select('count(o.id)')->getQuery()->getSingleScalarResult();
+
+        $page = (int) $request->query->get('_page', 1);
+        $limit = (int) $request->query->get('_limit', 20);
+        $offset = ($page - 1) * $limit;
+
+        $orders = $qb
+            ->setFirstResult($offset)
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
+
+        // 4. MAPPING DES DONNÉES
+        $data = array_map(function (Order $o) {
+            $shipping = $o->getShippingInfo();
+            return [
+                'id' => $o->getId(),
+                'customer' => $shipping ? ($shipping->getFirstName() . ' ' . $shipping->getLastName()) : 'Anonyme',
+                'email' => $shipping ? $shipping->getEmail() : 'N/A',
+                'total' => $o->getTotal(),
+                'status' => $o->getStatus(),
+                'createdAt' => $o->getCreatedAt()->format('d/m/Y H:i'),
+                'shippingMethod' => $o->getShippingMethod(),
+            ];
+        }, $orders);
+
+        // On renvoie le total dans le header pour Refine
+        return $this->json($data, 200, [
+            'x-total-count' => $total,
+            'Access-Control-Expose-Headers' => 'x-total-count'
+        ]);
     }
 
     /**
-     * CRUD: Delete an order
-     * HTTP Method: DELETE
-     * URL: /api/order/{id}
-     */
-    #[Route('/{id}', name: 'api_order_delete', methods: ['DELETE'])]
-    public function deleteOrder(Order $order): JsonResponse
-    {
-        // Contrôle de sécurité: Interdire la suppression si la commande est payée
-        if ($order->getStatus() !== 'created' && $order->getStatus() !== 'cancelled') {
-             
-             return $this->json(['error' => 'Impossible de supprimer cette commande. Statut actuel: ' . $order->getStatus()], 403);
-        }
-
-        try {
-            
-            $this->em->remove($order);
-            $this->em->flush();
-
-            return $this->json([
-                'success' => true,
-                'message' => "La commande #{$order->getId()} a été supprimée avec succès."
-            ], 200);
-
-        } catch (\Exception $e) {
-            return $this->json([
-                'error' => 'Erreur inattendue lors de la suppression de la commande.',
-                'details' => $e->getMessage()
-            ], 500);
-        }
-    }
-
-
-    /**
-     * CRUD: Get an order
-     * HTTP Method: GET
-     * URL: /api/order/{id}
-     * Get an order by id
+     * CRUD: Get order detail (Admin & Front Client)
      */
     #[Route('/{id}', name: 'api_order_get', methods: ['GET'])]
-    public function getOrder(int $id, EntityManagerInterface $em): JsonResponse
+    public function getOrder(int $id, OrderRepository $repo, Request $request): JsonResponse
     {
-        $order = $em->getRepository(Order::class)->find($id);
+        $order = $repo->find($id);
 
         if (!$order) {
             return $this->json(['error' => 'Commande introuvable'], 404);
         }
 
-        // Création du tableau des items de la commande (OrderItem)
-        $items = array_map(function ($item) {
-            return [
-                'orderItemId' => $item->getId(),
-                'productId' => $item->getProduct()?->getId(),
-                'variantId' => $item->getVariant()?->getId(),
-                'name' => $item->getProduct()?->getName(),
-                'quantity' => $item->getQuantity(),
-                'price' => $item->getPrice(),
-                'total' => $item->getTotalPrice(),
-                'weight' => $item->getWeight(),
-                // 'totalWeight' a été retiré car il est sur Order, pas OrderItem
-            ];
-        }, $order->getItems()->toArray());
+        $shipping = $order->getShippingInfo();
 
-        $payments = array_map(function ($payment) {
-            return [
-                'paymentId' => $payment->getId(),
-                'amount' => $payment->getAmount(),
-                'status' => $payment->getStatus(),
-                'method' => $payment->getMethod(),
-                'transactionId' => $payment->getTransactionId(),
-            ];
-        }, $order->getPayments()->toArray());
+        // Calcul TVA Globale (20% incluse dans le TTC)
+        $totalTtc = (float)$order->getTotal();
+        $totalTax = round($totalTtc - ($totalTtc / 1.2), 2);
+
+        // --- LOGIQUE PAIEMENT BOUTIQUE VS STRIPE ---
+        $paymentTypeDisplay = "En attente Stripe";
+        if ($order->getStatus() === 'paid' || $order->getStatus() === 'shipped' || $order->getStatus() === 'completed') {
+            $paymentTypeDisplay = "Payé par Carte (Stripe)";
+        } elseif ($order->getShippingMethod() === 'pickup') {
+            $paymentTypeDisplay = "À payer en boutique (Espèces/Comptoir)";
+        }
 
         return $this->json([
+            'id' => $order->getId(),
             'orderId' => $order->getId(),
-            'cartToken' => $order->getCartToken(),
-            
-            // --- AJOUT DE LA LISTE DES ARTICLES ---
-            'items' => $items, 
-            
-            'total' => $order->getTotal(),
-            'totalWeight' => $order->getTotalWeight(),
             'status' => $order->getStatus(),
-            'createdAt' => $order->getCreatedAt()->format('Y-m-d H:i:s'),
-            'updatedAt' => $order->getUpdatedAt()->format('Y-m-d H:i:s'),
-            
-            'payments' => $payments,
+            'total' => $order->getTotal(),
+            'totalTax' => $totalTax,
+            'totalWeight' => $order->getTotalWeight(),
+            'createdAt' => $order->getCreatedAt()->format('d/m/Y H:i'),
+            'shippingMethod' => $order->getShippingMethod(),
+            'shippingCost' => $order->getShippingCost(),
+            'customerIp' => $request->getClientIp() ?? 'Non détectée',
+            'paymentTypeDisplay' => $paymentTypeDisplay,
+
+            'customer' => $shipping ? ($shipping->getFirstName() . ' ' . $shipping->getLastName()) : 'Anonyme',
+            'shippingInfo' => [
+                'firstName' => $shipping?->getFirstName(),
+                'lastName' => $shipping?->getLastName(),
+                'email' => $shipping?->getEmail(),
+                'phone' => $shipping?->getPhone() ?? 'N/A',
+                'address' => $shipping?->getAddress(),
+                'city' => $shipping?->getCity(),
+                'postalCode' => $shipping?->getPostalCode(),
+                'country' => $shipping?->getCountry() ?? 'FR',
+                'pudoId' => $shipping?->getPudoId(),
+                'pudoName' => $shipping?->getPudoName(),
+                'pudoAddress' => $shipping?->getPudoAddress(),
+                'pudoPostalCode' => $shipping?->getPudoPostalCode(),
+                'pudoCity' => $shipping?->getPudoCity(),
+            ],
+
+            'items' => array_map(function ($item) {
+                $lineTotalTtc = (float)$item->getTotalPrice();
+                return [
+                    'orderItemId' => $item->getId(),
+                    'name' => $item->getProduct()?->getName(),
+                    'variantName' => $item->getVariant()?->getName(),
+                    'sku' => $item->getVariant() ? $item->getVariant()->getSku() : ($item->getProduct() ? $item->getProduct()->getSku() : 'N/A'),
+                    'quantity' => $item->getQuantity(),
+                    'price' => $item->getPrice(),
+                    'total' => $item->getTotalPrice(),
+                    'taxAmount' => round($lineTotalTtc - ($lineTotalTtc / 1.2), 2),
+                ];
+            }, $order->getItems()->toArray()),
+
+            'payments' => array_map(fn($p) => [
+                'paymentId' => $p->getId(),
+                'transactionId' => $p->getTransactionId(),
+                'status' => $p->getStatus(),
+                'amount' => $p->getAmount(),
+                'method' => $p->getMethod() ?? 'Carte Bancaire',
+            ], $order->getPayments()->toArray()),
         ]);
     }
 
     /**
-     * API: Calculate Shipping Tariff
-     * HTTP Method: POST
-     * URL: /api/shipping/calculate
-     */
-    #[Route('/shipping/calculate', name: 'api_shipping_calculate', methods: ['POST'])]
-    public function calculateShipping(Request $request): JsonResponse
-    {
-        $data = json_decode($request->getContent(), true);
-
-        $weightInKg = $data['totalWeight'] ?? 0.0;
-        $modeCode = $data['modeCode'] ?? null; 
-        $countryCode = $data['countryCode'] ?? 'FR'; 
-
-        if (empty($modeCode) || $weightInKg <= 0) {
-            return $this->json(['error' => 'Poids ou mode de livraison manquant.'], 400);
-        }
-
-        try {
-            $shippingCost = $this->tariffCalculatorService->calculateShippingCost(
-                (float) $weightInKg,
-                $modeCode,
-                $countryCode
-            );
-
-            return $this->json([
-                'success' => true,
-                'shippingCost' => number_format($shippingCost, 2, '.', ''),
-                'message' => 'Tarif calculé avec succès.'
-            ]);
-        } catch (\Exception $e) {
-            return $this->json([
-                'error' => 'Impossible de calculer le tarif.',
-                'details' => $e->getMessage()
-            ], 400);
-        }
-    }
-
-
-    /**
-     * API: Update Shipping Info, Method, Cost, PUDO details, and Finalize Total.
-     * HTTP Method: POST
-     * URL: /api/order/{id}/shipping
+     * API: Update Shipping Info
      */
     #[Route('/{id}/shipping', name: 'api_order_update_shipping', methods: ['POST'])]
     public function updateShippingInfo(Order $order, Request $request): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
+        $method = $data['shippingMethod'] ?? 'pickup';
 
-        // Mise à jour des frais et de la méthode dans l'entité Order
-        $shippingMethod = $data['shippingMethod'] ?? null;
-        $shippingCost = $data['shippingCost'] ?? '0.00';
+        $order->setShippingMethod($method);
+        $order->setShippingCost($data['shippingCost'] ?? 0);
 
-        if (empty($shippingMethod)) {
-            return $this->json(['error' => 'La méthode de livraison est manquante.'], 400);
+        if ($method === 'pickup' && $order->getStatus() === 'created') {
+            $order->setStatus('created');
         }
 
-        $order->setShippingMethod($shippingMethod);
-        $order->setShippingCost($shippingCost);
-
-        // Recalculer et stocker le total final (SubTotal + ShippingCost)
         $order->setTotal($order->getTotalPrice());
 
-        // Mise à jour ou Création de ShippingInfo
-        try {
-            $shippingInfo = $order->getShippingInfo() ?: new ShippingInfo();
-            $shippingInfo->setOrder($order);
+        // On lie bien les infos de livraison
+        $shippingInfo = $order->getShippingInfo() ?: new ShippingInfo();
+        $shippingInfo->setOrder($order);
+        $shippingInfo->setEmail($data['email'] ?? null);
+        $shippingInfo->setFirstName($data['firstName'] ?? '');
+        $shippingInfo->setLastName($data['lastName'] ?? '');
+        $shippingInfo->setAddress($data['address'] ?? '');
+        $shippingInfo->setPostalCode($data['postalCode'] ?? '');
+        $shippingInfo->setCity($data['city'] ?? '');
+        $shippingInfo->setCountry($data['country'] ?? 'FR');
+        $shippingInfo->setPhone($data['phone'] ?? null);
 
-            // Mis à jour l'objet ShippingInfo avec toutes les données
-            $this->serializer->deserialize(
-                $request->getContent(),
-                ShippingInfo::class,
-                'json',
-                ['object_to_populate' => $shippingInfo]
-            );
+        if (isset($data['pudoId'])) {
+            $shippingInfo->setPudoId($data['pudoId']);
+            $shippingInfo->setPudoName($data['pudoName']);
+            $shippingInfo->setPudoAddress($data['pudoAddress']);
+            $shippingInfo->setPudoPostalCode($data['pudoPostalCode']);
+            $shippingInfo->setPudoCity($data['pudoCity']);
+        } else {
+            $shippingInfo->setPudoId(null);
+        }
 
-            $errors = $this->validator->validate($shippingInfo);
+        $this->em->persist($shippingInfo);
+        $this->em->flush(); // On sauve en BDD avant d'envoyer le mail
 
-            if (count($errors) > 0) {
-                $errorMessages = [];
-                foreach ($errors as $error) {
-                    $errorMessages[$error->getPropertyPath()] = $error->getMessage();
+        return $this->json(['success' => true]);
+    }
+
+    /**
+     * API: Update Status (Dashboard Admin)
+     * Gère : Changement de statut, Paiement comptoir, Remboursement Stripe, Restockage, Envoi Facture.
+     */
+    #[Route('/{id}/status', name: 'api_order_update_status', methods: ['PATCH', 'PUT', 'POST'])]
+    #[IsGranted('ROLE_ADMIN')]
+    public function updateStatus(
+        Order $order, 
+        Request $request, 
+        EntityManagerInterface $em, 
+        StockService $stockService 
+    ): JsonResponse
+    {
+        $data = json_decode($request->getContent(), true);
+        $newStatus = $data['status'] ?? null;
+        $oldStatus = $order->getStatus();
+
+        $allowedStatuses = ['created', 'paid', 'shipped', 'completed', 'cancelled'];
+        if (!$newStatus || !in_array($newStatus, $allowedStatuses)) {
+            return $this->json(['error' => 'Statut invalide'], 400);
+        }
+
+        // ==============================================================================
+        // 1. GESTION DE L'ANNULATION (Remboursement & Restockage)
+        // ==============================================================================
+        if ($newStatus === 'cancelled' && $oldStatus !== 'cancelled') {
+            
+            // A. RESTOCKAGE
+            // On remet le stock si la commande était validée (paid/shipped) 
+            // OU si c'était un retrait boutique (même en 'created', car le stock est décrémenté à la réservation)
+            $wasReserved = in_array($oldStatus, ['paid', 'shipped', 'completed']) 
+                           || ($oldStatus === 'created' && $order->getShippingMethod() === 'pickup');
+
+            if ($wasReserved) {
+                $stockService->incrementStock($order);
+            }
+
+            // B. REMBOURSEMENT STRIPE
+            // On cherche s'il y a un paiement Stripe validé
+            $stripePayment = $em->getRepository(Payment::class)->findOneBy([
+                'order' => $order, 
+                'method' => 'stripe',
+                'status' => 'success'
+            ]);
+
+            if ($stripePayment) {
+                try {
+                    // On initialise Stripe avec la clé secrète
+                    Stripe::setApiKey($this->getParameter('stripe_secret_key'));
+                    
+                    // On lance le remboursement total
+                    $refund = Refund::create([
+                        'payment_intent' => $stripePayment->getTransactionId(),
+                        'reason' => 'requested_by_customer', // Raison: demande client
+                    ]);
+
+                    // On met à jour le statut du paiement en BDD local
+                    $stripePayment->setStatus('refunded');
+                    $stripePayment->setUpdatedAt(new \DateTimeImmutable());
+
+                } catch (\Exception $e) {
+                    // Si le remboursement échoue (ex: trop tard, clé invalide), on bloque et on avertit l'admin
+                    return $this->json([
+                        'error' => 'Erreur critique lors du remboursement Stripe : ' . $e->getMessage()
+                    ], 500);
                 }
-                return $this->json([
-                    'error' => 'Erreur de validation des informations de livraison.',
-                    'details' => $errorMessages
-                ], 400);
+            }
+        }
+
+        // ==============================================================================
+        // 2. LOGIQUE PAIEMENT BOUTIQUE (Validation au comptoir)
+        // ==============================================================================
+        // Si on passe à "Expédié/Retiré" pour un Pickup qui était encore en "Created" (donc non payé en ligne)
+        if ($newStatus === 'shipped' && $newStatus !== 'cancelled' && $order->getShippingMethod() === 'pickup' && $oldStatus === 'created') {
+
+            // On annule les éventuelles tentatives de paiement Stripe échouées/en attente
+            $existingPayments = $em->getRepository(Payment::class)->findBy(['order' => $order]);
+            foreach ($existingPayments as $p) {
+                if ($p->getStatus() === 'pending') {
+                    $p->setStatus('cancelled');
+                    $p->setUpdatedAt(new \DateTimeImmutable());
+                }
             }
 
-            $this->em->persist($shippingInfo);
+            // On crée le paiement "Cash/Boutique"
+            $payment = new Payment();
+            $payment->setOrder($order);
+            $payment->setMethod('boutique'); // Méthode spécifique
+            $payment->setAmount($order->getTotal());
+            $payment->setStatus('success');
+            // On génère un ID de transaction fictif pour la traçabilité
+            $payment->setTransactionId('CASH-' . $order->getId() . '-' . time());
+            $payment->setUpdatedAt(new \DateTimeImmutable());
 
-            // Création d'un paiement 'pending' avec le bon total
-            if ($order->getPayments()->isEmpty()) {
-                $payment = new Payment();
-                $payment->setOrder($order);
-                $payment->setAmount($order->getTotalPrice());
-                $payment->setStatus('pending');
-                $payment->setMethod('');
-                $this->em->persist($payment);
+            $em->persist($payment);
+        }
+
+        // ==============================================================================
+        // 3. MISE À JOUR FINALE ET SAUVEGARDE
+        // ==============================================================================
+        $order->setStatus($newStatus);
+        $order->setUpdatedAt(new \DateTimeImmutable());
+
+        $em->flush();
+
+        // ==============================================================================
+        // 4. ENVOI DE LA FACTURE PAR EMAIL
+        // ==============================================================================
+        // On envoie la facture uniquement au passage à 'shipped' (si pas déjà fait)
+        if ($newStatus === 'shipped' && $oldStatus !== 'shipped') {
+            try {
+                // On force le rafraîchissement pour que la facture inclue le nouveau paiement (si Boutique)
+                $em->refresh($order);
+
+                $this->emailService->sendInvoiceNotification($order);
+            } catch (\Exception $e) {
+                error_log("Erreur envoi facture commande #" . $order->getId() . " : " . $e->getMessage());
             }
+        }
 
-            $this->em->flush();
+        return $this->json([
+            'success' => true,
+            'newStatus' => $order->getStatus(),
+            'message' => $newStatus === 'cancelled' 
+                ? 'Commande annulée. Stock rétabli et remboursement effectué (si éligible).' 
+                : 'Statut mis à jour avec succès.'
+        ]);
+    }
 
-            return $this->json([
-                'success' => true,
-                'message' => 'Informations de livraison et frais enregistrés.',
-                'totalFinal' => $order->getTotal(),
-                'shippingInfoId' => $shippingInfo->getId()
-            ], 200);
+    /**
+     * CRUD: Create Order
+     */
+    #[Route('/create', name: 'api_order_create', methods: ['POST'])]
+    public function createOrder(Request $request): JsonResponse
+    {
+        $data = json_decode($request->getContent(), true);
+        $cartToken = $data['cartToken'] ?? null;
+        $cart = $this->em->getRepository(Cart::class)->findOneBy(['token' => $cartToken]);
+
+        if (!$cart) return $this->json(['error' => 'Panier introuvable'], 404);
+
+        $order = new Order();
+        $order->setCartToken($cartToken);
+        $order->setStatus('created');
+
+        foreach ($cart->getItems() as $cartItem) {
+            if (!$cartItem->getProduct() || $cartItem->getQuantity() <= 0) continue;
+
+            $orderItem = new OrderItem();
+            $orderItem->setProduct($cartItem->getProduct());
+            $orderItem->setVariant($cartItem->getVariant());
+            $orderItem->setQuantity($cartItem->getQuantity());
+            $orderItem->setPrice($cartItem->getPrice() ?? '0.00');
+            $orderItem->setWeight($cartItem->getWeight() ?? 0.0);
+            $order->addItem($orderItem);
+        }
+
+        if ($order->getItems()->isEmpty()) return $this->json(['error' => 'Panier vide'], 400);
+
+        $order->setTotalWeight($cart->getTotalWeight() ?? 0.0);
+        $order->setTotal($order->getSubTotal());
+
+        $this->em->persist($order);
+        $this->em->flush();
+
+        return $this->json([
+            'success' => true,
+            'orderId' => $order->getId(),
+            'subTotal' => $order->getSubTotal(),
+            'total' => $order->getTotal(),
+        ]);
+    }
+
+    /**
+     * API: Confirmer une commande en retrait boutique (Paiement sur place)
+     * Cette route est appelée par le Front quand l'utilisateur clique sur "Valider"
+     */
+    #[Route('/{id}/confirm-pickup', name: 'api_order_confirm_pickup', methods: ['POST'])]
+    public function confirmPickup(Order $order, EntityManagerInterface $em, EmailService $emailService, StockService $stockService): JsonResponse
+    {
+        // 1. Vérifications de sécurité
+        if ($order->getShippingMethod() !== 'pickup') {
+            return $this->json(['error' => 'Cette commande n\'est pas configurée pour un retrait boutique'], 400);
+        }
+
+        // Si la commande est déjà payée ou expédiée, on ne fait rien
+        if (in_array($order->getStatus(), ['paid', 'shipped', 'completed'])) {
+            return $this->json(['message' => 'Commande déjà validée'], 200);
+        }
+
+        // Décrémente le stock
+        $stockService->decrementStock($order);
+
+        // 3. Envoi de l'email
+        try {
+            // Mail au Client
+            $emailService->sendPickupConfirmation($order);
+            // Mail à l'admin
+            $emailService->sendAdminPickupNotification($order);
         } catch (\Exception $e) {
-            return $this->json([
-                'error' => 'Erreur inattendue lors de la mise à jour.',
-                'details' => $e->getMessage()
-            ], 400);
+            // On log l'erreur mais on ne bloque pas la réponse client
+            error_log('Erreur envoi mail pickup: ' . $e->getMessage());
+        }
+
+        // 4. Sauvegarde (si changement de statut)
+        $em->flush();
+
+        return $this->json([
+            'success' => true,
+            'message' => 'Commande validée, email envoyé',
+            'orderId' => $order->getId()
+        ]);
+    }
+
+    /**
+     * API: Calculate Shipping
+     */
+    #[Route('/shipping/calculate', name: 'api_shipping_calculate', methods: ['POST'])]
+    public function calculateShipping(Request $request): JsonResponse
+    {
+        $data = json_decode($request->getContent(), true);
+        $weightInKg = (float)($data['totalWeight'] ?? 0.0);
+        $modeCode = $data['modeCode'] ?? null;
+        $countryCode = $data['countryCode'] ?? 'FR';
+
+        try {
+            $cost = $this->tariffCalculatorService->calculateShippingCost($weightInKg, $modeCode, $countryCode);
+            return $this->json(['success' => true, 'shippingCost' => number_format($cost, 2, '.', '')]);
+        } catch (\Exception $e) {
+            return $this->json(['error' => $e->getMessage()], 400);
         }
     }
 
     /**
      * API: Search Mondial Relay PUDOs
-     * HTTP Method: POST
-     * URL: /api/order/pudo/search
      */
     #[Route('/pudo/search', name: 'api_order_pudo_search', methods: ['POST'])]
     public function searchPudos(Request $request): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
-
-        // Idéalement, récupérer ces valeurs du ShippingInfo si elles existent déjà
         $postalCode = $data['postalCode'] ?? null;
         $countryCode = $data['countryCode'] ?? 'FR';
-        $weightInKg = $data['totalWeight'] ?? 0.0; // Poids en KG
-
-        if (empty($postalCode) || $weightInKg <= 0) {
-            return $this->json(['error' => 'Code postal ou poids manquant.'], 400);
-        }
+        $weightInKg = (float)($data['totalWeight'] ?? 0.0);
 
         try {
-            // Le service gère la conversion KG -> Grammes et l'appel SOAP
-            $pudos = $this->mondialRelayService->searchPointsRelais(
-                $postalCode,
-                $countryCode,
-                (float) $weightInKg
-            );
-
-            return $this->json([
-                'success' => true,
-                'pudos' => $pudos,
-                'message' => count($pudos) . ' Points Relais trouvés.'
-            ]);
-
+            $pudos = $this->mondialRelayService->searchPointsRelais($postalCode, $countryCode, $weightInKg);
+            return $this->json(['success' => true, 'pudos' => $pudos]);
         } catch (\Exception $e) {
-            return $this->json([
-                'error' => 'Erreur lors de la recherche des Points Relais.',
-                'details' => $e->getMessage()
-            ], 400);
+            return $this->json(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    /**
+     * API: Search Colissimo PUDOs
+     */
+    #[Route('/pudo/colissimo/search', name: 'api_order_colissimo_search', methods: ['POST'])]
+    public function searchColissimoPudos(Request $request): JsonResponse
+    {
+        $data = json_decode($request->getContent(), true);
+        $address = $data['address'] ?? '';
+        $zipCode = $data['postalCode'] ?? $data['zipCode'] ?? null;
+        $city = $data['city'] ?? null;
+        $countryCode = $data['countryCode'] ?? 'FR';
+        $weightInKg = (float)($data['totalWeight'] ?? 0.0);
+
+        try {
+            $pudos = $this->colissimoService->searchPointsRetrait($address, $zipCode, $city, $countryCode, $weightInKg);
+            return $this->json(['success' => true, 'pudos' => $pudos, 'count' => count($pudos)]);
+        } catch (\Exception $e) {
+            return $this->json(['error' => $e->getMessage()], 500);
         }
     }
 }

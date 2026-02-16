@@ -1,10 +1,15 @@
 <?php
+
 namespace App\Entity;
 
 use App\Repository\PaymentRepository;
 use Doctrine\ORM\Mapping as ORM;
+use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
 
 #[ORM\Entity(repositoryClass: PaymentRepository::class)]
+#[ORM\Table(name: 'payment')]
+// Cette contrainte empêche d'avoir deux lignes avec le même order_id ET la même method
+#[ORM\UniqueConstraint(name: 'UNIQ_PAYMENT_ORDER_METHOD', columns: ['order_id', 'method'])]
 class Payment
 {
     #[ORM\Id]
@@ -34,53 +39,111 @@ class Payment
     #[ORM\Column(type: 'datetime', nullable: true)]
     private ?\DateTimeInterface $updatedAt = null;
 
-    public function __construct() {
+    public function __construct()
+    {
         $this->createdAt = new \DateTimeImmutable();
     }
 
     // --- Getters & Setters ---
-    public function getId(): ?int { return $this->id; }
-
-    public function getOrder(): ?Order { return $this->order; }
-    public function setOrder(?Order $order): self { $this->order = $order; return $this; }
-
-    public function getStatus(): ?string { return $this->status; }
-    public function setStatus(string $status): self { 
-        $this->status = $status; 
-        $this->updatedAt = new \DateTimeImmutable();
-        return $this; 
+    public function getId(): ?int
+    {
+        return $this->id;
     }
 
-    public function getMethod(): ?string { return $this->method; }
-    public function setMethod(?string $method): self { $this->method = $method; return $this; }
+    public function getOrder(): ?Order
+    {
+        return $this->order;
+    }
+    public function setOrder(?Order $order): self
+    {
+        $this->order = $order;
+        return $this;
+    }
 
-    public function getAmount(): float { return (float)$this->amount; }
-    public function setAmount(string $amount): self { $this->amount = $amount; return $this; }
+    public function getStatus(): ?string
+    {
+        return $this->status;
+    }
+    public function setStatus(string $status): self
+    {
+        $this->status = $status;
+        $this->updatedAt = new \DateTimeImmutable();
+        return $this;
+    }
 
-    public function getTransactionId(): ?string { return $this->transactionId; }
-    public function setTransactionId(?string $transactionId): self { $this->transactionId = $transactionId; return $this; }
+    public function getMethod(): ?string
+    {
+        return $this->method;
+    }
+    public function setMethod(?string $method): self
+    {
+        $this->method = $method;
+        return $this;
+    }
 
-    public function getCreatedAt(): \DateTimeInterface { return $this->createdAt; }
-    public function getUpdatedAt(): ?\DateTimeInterface { return $this->updatedAt; }
+    public function getAmount(): float
+    {
+        return (float)$this->amount;
+    }
+    public function setAmount(string $amount): self
+    {
+        $this->amount = $amount;
+        return $this;
+    }
+
+    public function getTransactionId(): ?string
+    {
+        return $this->transactionId;
+    }
+    public function setTransactionId(?string $transactionId): self
+    {
+        $this->transactionId = $transactionId;
+        return $this;
+    }
+
+    public function getCreatedAt(): \DateTimeInterface
+    {
+        return $this->createdAt;
+    }
+    public function getUpdatedAt(): ?\DateTimeInterface
+    {
+        return $this->updatedAt;
+    }
 
     // --- Méthodes ---
-    public function isPaid(): bool {
+    public function isPaid(): bool
+    {
         return $this->status === 'success';
     }
 
-    public function isPending(): bool {
+    public function isPending(): bool
+    {
         return $this->status === 'pending';
     }
 
-    public function isFailed(): bool {
+    public function isFailed(): bool
+    {
         return $this->status === 'failed';
     }
 
-    public function getRemainingAmount(): float {
+    public function getRemainingAmount(): float
+    {
         if (!$this->order) return 0;
-        $totalPaid = $this->order->getPayments()->filter(fn($p) => $p->isPaid())
-                                        ->map(fn($p) => $p->getAmount())
-                                        ->sum();
+
+        $totalPaid = 0;
+        foreach ($this->order->getPayments() as $p) {
+            if ($p->isPaid()) {
+                $totalPaid += $p->getAmount();
+            }
+        }
+
         return max(0, $this->order->getTotal() - $totalPaid);
+    }
+
+    public function setUpdatedAt(?\DateTimeInterface $updatedAt): self
+    {
+        $this->updatedAt = $updatedAt;
+
+        return $this;
     }
 }
