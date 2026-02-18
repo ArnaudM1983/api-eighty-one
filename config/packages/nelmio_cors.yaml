@@ -1,20 +1,26 @@
 nelmio_cors:
-  defaults:
-    allow_origin: ['http://localhost:3000', 'http://localhost:5173', https://eightyonestore.com]
-    allow_credentials: true
-    # Ajout de PATCH ici
-    allow_methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
-    # Ajout de x-total-count pour que le frontend puisse envoyer/lire ce header
-    allow_headers: ['Content-Type', 'Authorization', 'x-total-count']
-    # Autorise le JS à lire ces headers dans la réponse
-    expose_headers: ['Link', 'x-total-count', 'Set-Cookie']
-    max_age: 3600
-  paths:
-    '^/api/':
-      allow_origin: ['http://localhost:3000', 'http://localhost:5173', https://eightyonestore.com]
-      allow_credentials: true
-      # Ajout de PATCH ici aussi
-      allow_methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
-      allow_headers: ['*']
-      expose_headers: ['x-total-count', 'Set-Cookie']
-      max_age: 3600
+    defaults:
+        origin_regex: true 
+        allow_origin: 
+            - 'http://localhost:3000'
+            - 'http://localhost:5173'
+            - 'https://eightyonestore.com'
+            - '^https?://.*\.vercel\.app$' # Autorise toutes les URLs de preview Vercel
+        allow_credentials: true
+        allow_methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
+        allow_headers: ['Content-Type', 'Authorization', 'x-total-count']
+        expose_headers: ['Link', 'x-total-count', 'Set-Cookie']
+        max_age: 3600
+    paths:
+        '^/api/':
+            origin_regex: true
+            allow_origin: 
+                - 'http://localhost:3000'
+                - 'http://localhost:5173'
+                - 'https://eightyonestore.com'
+                - '^https?://.*\.vercel\.app$'
+            allow_credentials: true
+            allow_methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
+            allow_headers: ['*']
+            expose_headers: ['x-total-count', 'Set-Cookie']
+            max_age: 3600
