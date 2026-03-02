@@ -150,16 +150,15 @@
 								{% endif %}
 
 								{% if thumb %}
-									{# On définit en dur la nouvelle URL de l'API si backend_url n'est pas passé par le contrôleur #}
-									{% set base = 'https://api-eightyone.com' %}
+									{# 1. On enlève TOUS les slashs au début et à la fin de la variable thumb #}
+									{% set cleanPath = thumb|trim('/') %}
 
-									{# On construit l'URL proprement en gérant les slashs #}
-									{% set cleanThumb = thumb|trim('/') %}
-									{% set fullImageUrl = thumb starts with 'http' ? thumb : base ~ '/' ~ cleanThumb %}
+									{# 2. On construit l'URL sans risque de double slash #}
+									{% set fullImageUrl = 'https://api-eightyone.com/' ~ cleanPath %}
 
-									<img src="{{ fullImageUrl }}" class="product-img" alt="Produit" width="50" height="50">
+									<img src="{{ fullImageUrl }}" alt="Produit" style="width:50px; height:50px; display:block; border:1px solid #ddd; border-radius:4px;" width="50" height="50">
 								{% else %}
-									<div style="width:50px; height:50px; background:#eee; line-height:50px; color:#aaa; font-size:10px; text-align:center;">N/A</div>
+									<div style="width:50px; height:50px; background:#eee; line-height:50px; text-align:center; color:#aaa; font-size:10px;">N/A</div>
 								{% endif %}
 							</td>
 							<td>
