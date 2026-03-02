@@ -92,14 +92,19 @@ class Order
         return (float) array_sum(array_map(fn($item) => $item->getTotalPrice(), $this->items->toArray()));
     }
 
-    // Calcul du prix final (articles + port)
+    // Calcul du prix final (articles + port) - Gardé pour la compatibilité
     public function getTotalPrice(): float
     {
         $itemsTotal = $this->getSubTotal();
         $shipping = (float) $this->getShippingCost();
 
-        // Retourne le sous-total + les frais de port (en s'assurant que shippingCost n'est pas null)
-        return $itemsTotal + ($shipping ?? 0.0);
+        return $itemsTotal + $shipping;
+    }
+
+    // --- NOUVELLE MÉTHODE : Centralise le calcul pour Stripe/PayPal ---
+    public function calculateTotal(): float
+    {
+        return $this->getSubTotal() + (float) $this->getShippingCost();
     }
 
     public function getTotal(): ?string

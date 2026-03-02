@@ -43,9 +43,7 @@ class OrderController extends AbstractController
         $qb = $repo->createQueryBuilder('o')
             ->orderBy('o.createdAt', 'DESC');
 
-        // 1. FILTRE : Recherche (Client ou ID)
         if ($q = $request->query->get('q')) {
-            // On cherche dans les infos de shipping jointes
             $qb->leftJoin('o.shippingInfo', 's')
                ->andWhere('
                    o.id LIKE :q OR 
@@ -56,14 +54,11 @@ class OrderController extends AbstractController
                ->setParameter('q', '%' . $q . '%');
         }
 
-        // 2. FILTRE : Statut
         if ($status = $request->query->get('status')) {
             $qb->andWhere('o.status = :status')
                ->setParameter('status', $status);
         }
 
-        // 3. PAGINATION
-        // On clone pour compter le total avant d'appliquer la limite
         $countQb = clone $qb;
         $total = $countQb->select('count(o.id)')->getQuery()->getSingleScalarResult();
 
@@ -77,7 +72,6 @@ class OrderController extends AbstractController
             ->getQuery()
             ->getResult();
 
-        // 4. MAPPING DES DONNÉES
         $data = array_map(function (Order $o) {
             $shipping = $o->getShippingInfo();
             return [
@@ -91,7 +85,6 @@ class OrderController extends AbstractController
             ];
         }, $orders);
 
-        // On renvoie le total dans le header pour Refine
         return $this->json($data, 200, [
             'x-total-count' => $total,
             'Access-Control-Expose-Headers' => 'x-total-count'
@@ -112,11 +105,9 @@ class OrderController extends AbstractController
 
         $shipping = $order->getShippingInfo();
 
-        // Calcul TVA Globale (20% incluse dans le TTC)
         $totalTtc = (float)$order->getTotal();
         $totalTax = round($totalTtc - ($totalTtc / 1.2), 2);
 
-        // --- LOGIQUE PAIEMENT BOUTIQUE VS STRIPE ---
         $paymentTypeDisplay = "En attente Stripe";
         if ($order->getStatus() === 'paid' || $order->getStatus() === 'shipped' || $order->getStatus() === 'completed') {
             $paymentTypeDisplay = "Payé par Carte (Stripe)";
@@ -194,9 +185,9 @@ class OrderController extends AbstractController
             $order->setStatus('created');
         }
 
-        $order->setTotal($order->getTotalPrice());
+        // CORRECTION ICI : On utilise calculateTotal() qui inclut les frais de port
+        $order->setTotal($order->calculateTotal());
 
-        // On lie bien les infos de livraison
         $shippingInfo = $order->getShippingInfo() ?: new ShippingInfo();
         $shippingInfo->setOrder($order);
         $shippingInfo->setEmail($data['email'] ?? null);
@@ -219,14 +210,13 @@ class OrderController extends AbstractController
         }
 
         $this->em->persist($shippingInfo);
-        $this->em->flush(); // On sauve en BDD avant d'envoyer le mail
+        $this->em->flush();
 
-        return $this->json(['success' => true]);
+        return $this->json(['success' => true, 'newTotal' => $order->getTotal()]);
     }
 
     /**
      * API: Update Status (Dashboard Admin)
-     * Gère : Changement de statut, Paiement comptoir, Remboursement Stripe, Restockage, Envoi Facture.
      */
     #[Route('/{id}/status', name: 'api_order_update_status', methods: ['PATCH', 'PUT', 'POST'])]
     #[IsGranted('ROLE_ADMIN')]
@@ -246,14 +236,8 @@ class OrderController extends AbstractController
             return $this->json(['error' => 'Statut invalide'], 400);
         }
 
-        // ==============================================================================
-        // 1. GESTION DE L'ANNULATION (Remboursement & Restockage)
-        // ==============================================================================
         if ($newStatus === 'cancelled' && $oldStatus !== 'cancelled') {
             
-            // A. RESTOCKAGE
-            // On remet le stock si la commande était validée (paid/shipped) 
-            // OU si c'était un retrait boutique (même en 'created', car le stock est décrémenté à la réservation)
             $wasReserved = in_array($oldStatus, ['paid', 'shipped', 'completed']) 
                            || ($oldStatus === 'created' && $order->getShippingMethod() === 'pickup');
 
@@ -261,8 +245,6 @@ class OrderController extends AbstractController
                 $stockService->incrementStock($order);
             }
 
-            // B. REMBOURSEMENT STRIPE
-            // On cherche s'il y a un paiement Stripe validé
             $stripePayment = $em->getRepository(Payment::class)->findOneBy([
                 'order' => $order, 
                 'method' => 'stripe',
@@ -271,21 +253,17 @@ class OrderController extends AbstractController
 
             if ($stripePayment) {
                 try {
-                    // On initialise Stripe avec la clé secrète
                     Stripe::setApiKey($this->getParameter('stripe_secret_key'));
                     
-                    // On lance le remboursement total
-                    $refund = Refund::create([
+                    Refund::create([
                         'payment_intent' => $stripePayment->getTransactionId(),
-                        'reason' => 'requested_by_customer', // Raison: demande client
+                        'reason' => 'requested_by_customer',
                     ]);
 
-                    // On met à jour le statut du paiement en BDD local
                     $stripePayment->setStatus('refunded');
                     $stripePayment->setUpdatedAt(new \DateTimeImmutable());
 
                 } catch (\Exception $e) {
-                    // Si le remboursement échoue (ex: trop tard, clé invalide), on bloque et on avertit l'admin
                     return $this->json([
                         'error' => 'Erreur critique lors du remboursement Stripe : ' . $e->getMessage()
                     ], 500);
@@ -293,13 +271,7 @@ class OrderController extends AbstractController
             }
         }
 
-        // ==============================================================================
-        // 2. LOGIQUE PAIEMENT BOUTIQUE (Validation au comptoir)
-        // ==============================================================================
-        // Si on passe à "Expédié/Retiré" pour un Pickup qui était encore en "Created" (donc non payé en ligne)
         if ($newStatus === 'shipped' && $newStatus !== 'cancelled' && $order->getShippingMethod() === 'pickup' && $oldStatus === 'created') {
-
-            // On annule les éventuelles tentatives de paiement Stripe échouées/en attente
             $existingPayments = $em->getRepository(Payment::class)->findBy(['order' => $order]);
             foreach ($existingPayments as $p) {
                 if ($p->getStatus() === 'pending') {
@@ -308,36 +280,24 @@ class OrderController extends AbstractController
                 }
             }
 
-            // On crée le paiement "Cash/Boutique"
             $payment = new Payment();
             $payment->setOrder($order);
-            $payment->setMethod('boutique'); // Méthode spécifique
+            $payment->setMethod('boutique');
             $payment->setAmount($order->getTotal());
             $payment->setStatus('success');
-            // On génère un ID de transaction fictif pour la traçabilité
             $payment->setTransactionId('CASH-' . $order->getId() . '-' . time());
             $payment->setUpdatedAt(new \DateTimeImmutable());
 
             $em->persist($payment);
         }
 
-        // ==============================================================================
-        // 3. MISE À JOUR FINALE ET SAUVEGARDE
-        // ==============================================================================
         $order->setStatus($newStatus);
         $order->setUpdatedAt(new \DateTimeImmutable());
-
         $em->flush();
 
-        // ==============================================================================
-        // 4. ENVOI DE LA FACTURE PAR EMAIL
-        // ==============================================================================
-        // On envoie la facture uniquement au passage à 'shipped' (si pas déjà fait)
         if ($newStatus === 'shipped' && $oldStatus !== 'shipped') {
             try {
-                // On force le rafraîchissement pour que la facture inclue le nouveau paiement (si Boutique)
                 $em->refresh($order);
-
                 $this->emailService->sendInvoiceNotification($order);
             } catch (\Exception $e) {
                 error_log("Erreur envoi facture commande #" . $order->getId() . " : " . $e->getMessage());
@@ -398,37 +358,28 @@ class OrderController extends AbstractController
     }
 
     /**
-     * API: Confirmer une commande en retrait boutique (Paiement sur place)
-     * Cette route est appelée par le Front quand l'utilisateur clique sur "Valider"
+     * API: Confirmer une commande en retrait boutique
      */
     #[Route('/{id}/confirm-pickup', name: 'api_order_confirm_pickup', methods: ['POST'])]
     public function confirmPickup(Order $order, EntityManagerInterface $em, EmailService $emailService, StockService $stockService): JsonResponse
     {
-        // 1. Vérifications de sécurité
         if ($order->getShippingMethod() !== 'pickup') {
             return $this->json(['error' => 'Cette commande n\'est pas configurée pour un retrait boutique'], 400);
         }
 
-        // Si la commande est déjà payée ou expédiée, on ne fait rien
         if (in_array($order->getStatus(), ['paid', 'shipped', 'completed'])) {
             return $this->json(['message' => 'Commande déjà validée'], 200);
         }
 
-        // Décrémente le stock
         $stockService->decrementStock($order);
 
-        // 3. Envoi de l'email
         try {
-            // Mail au Client
             $emailService->sendPickupConfirmation($order);
-            // Mail à l'admin
             $emailService->sendAdminPickupNotification($order);
         } catch (\Exception $e) {
-            // On log l'erreur mais on ne bloque pas la réponse client
             error_log('Erreur envoi mail pickup: ' . $e->getMessage());
         }
 
-        // 4. Sauvegarde (si changement de statut)
         $em->flush();
 
         return $this->json([
