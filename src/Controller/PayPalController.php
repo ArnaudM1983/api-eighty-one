@@ -43,30 +43,28 @@ class PayPalController extends AbstractController
     #[Route('/create/{id}', name: 'api_paypal_create', methods: ['POST'])]
     public function createOrder(Order $order, EntityManagerInterface $em): JsonResponse
     {
-        // --- NETTOYAGE PRÉVENTIF ---
-        // On vérifie s'il y a déjà un paiement en attente (Stripe ou ancien PayPal)
         $existingPayment = $em->getRepository(Payment::class)->findOneBy(['order' => $order]);
 
         if ($existingPayment) {
-            // Si la commande est déjà payée, on arrête tout
             if ($existingPayment->getStatus() === 'success') {
                  return $this->json(['error' => 'Commande déjà payée'], 400);
             }
             
-            // Sinon, on supprime le brouillon existant pour éviter le doublon en base
-            // (Ex: l'utilisateur avait ouvert le form Stripe juste avant)
             if ($existingPayment->getStatus() === 'pending') {
                 $em->remove($existingPayment);
                 $em->flush();
             }
         }
-        // ---------------------------
 
         $accessToken = $this->getAccessToken();
         if (!$accessToken) return $this->json(['error' => 'Erreur connexion PayPal'], 500);
 
         $url = $this->getBaseUrl() . '/v2/checkout/orders';
-        $total = number_format($order->getTotal(), 2, '.', '');
+        
+        // CORRECTION ICI : Force le recalcul et le formatage parfait pour PayPal
+        $totalFloat = $order->calculateTotal();
+        $order->setTotal($totalFloat);
+        $total = number_format($totalFloat, 2, '.', '');
 
         try {
             $response = $this->client->request('POST', $url, [
@@ -93,7 +91,7 @@ class PayPalController extends AbstractController
             $payment->setOrder($order);
             $payment->setMethod('paypal');
             $payment->setTransactionId($paypalOrderId);
-            $payment->setAmount($order->getTotal());
+            $payment->setAmount($totalFloat);
             $payment->setStatus('pending');
 
             $em->persist($payment);
@@ -133,7 +131,6 @@ class PayPalController extends AbstractController
                 $payment = $em->getRepository(Payment::class)->findOneBy(['transactionId' => $paypalOrderId]);
                 
                 if ($payment) {
-                    // Protection anti-doublon webhook/capture
                     if ($payment->getStatus() === 'success') {
                         return $this->json(['status' => 'COMPLETED']);
                     }
