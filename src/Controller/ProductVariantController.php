@@ -10,6 +10,7 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 #[Route('/api/variants')]
 class ProductVariantController extends AbstractController
@@ -56,6 +57,7 @@ class ProductVariantController extends AbstractController
      * URL: /api/variants
      **/
     #[Route('', methods: ['POST'])]
+    #[IsGranted('ROLE_ADMIN')]
     public function create(Request $request): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
@@ -119,6 +121,7 @@ class ProductVariantController extends AbstractController
      * Description: Update an variant.
      **/
     #[Route('/{id}', methods: ['PUT', 'PATCH'])]
+    #[IsGranted('ROLE_ADMIN')]
     public function update(Request $request, ProductVariant $variant): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
@@ -147,6 +150,7 @@ class ProductVariantController extends AbstractController
      * Description: Delete an existing variant.
      **/
     #[Route('/{id}', methods: ['DELETE'])]
+    #[IsGranted('ROLE_ADMIN')]
     public function delete(ProductVariant $variant): JsonResponse
     {
         $this->em->remove($variant);
