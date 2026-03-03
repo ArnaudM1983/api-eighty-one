@@ -9,6 +9,7 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 #[Route('/api/categories')]
 class CategoryController extends AbstractController
@@ -78,6 +79,7 @@ class CategoryController extends AbstractController
      * Créer une catégorie ou sous-catégorie
      */
     #[Route('', methods: ['POST'])]
+    #[IsGranted('ROLE_ADMIN')]
     public function create(Request $request): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
@@ -103,6 +105,7 @@ class CategoryController extends AbstractController
      * Mettre à jour une catégorie
      */
     #[Route('/{id}', methods: ['PATCH', 'PUT'])]
+    #[IsGranted('ROLE_ADMIN')]
     public function update(Request $request, Category $category): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
@@ -131,6 +134,7 @@ class CategoryController extends AbstractController
      * Supprimer une catégorie
      */
     #[Route('/{id}', methods: ['DELETE'])]
+    #[IsGranted('ROLE_ADMIN')]
     public function delete(Category $category): JsonResponse
     {
         // Note: Si une catégorie parente est supprimée, les enfants deviennent orphelins 

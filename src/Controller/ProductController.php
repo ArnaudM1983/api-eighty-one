@@ -13,6 +13,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Annotation\Route;
 use Doctrine\ORM\Tools\Pagination\Paginator;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 #[Route('/api/products')]
 class ProductController extends AbstractController
@@ -129,6 +130,7 @@ class ProductController extends AbstractController
      * CRUD: Create
      */
     #[Route('', methods: ['POST'])]
+    #[IsGranted('ROLE_ADMIN')]
     public function create(Request $request): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
@@ -180,6 +182,7 @@ class ProductController extends AbstractController
      * CRUD: Update
      */
     #[Route('/{id}', methods: ['PUT'])]
+    #[IsGranted('ROLE_ADMIN')]
     public function update(Request $request, Product $product): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
@@ -261,6 +264,7 @@ class ProductController extends AbstractController
      * CRUD: Delete
      */
     #[Route('/{id}', methods: ['DELETE'])]
+    #[IsGranted('ROLE_ADMIN')]
     public function delete(Product $product): JsonResponse
     {
         $this->em->remove($product);
@@ -300,6 +304,7 @@ class ProductController extends AbstractController
      * Update Stock
      */
     #[Route('/{id}', methods: ['PATCH'])]
+    #[IsGranted('ROLE_ADMIN')]
     public function updateStock(Request $request, Product $product): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
@@ -319,6 +324,7 @@ class ProductController extends AbstractController
      * Reorder
      */
     #[Route('/reorder', methods: ['POST'])]
+    #[IsGranted('ROLE_ADMIN')]
     public function reorder(Request $request): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
