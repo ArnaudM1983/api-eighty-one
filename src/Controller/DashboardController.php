@@ -55,8 +55,9 @@ class DashboardController extends AbstractController
             
             $trend = $calculateTrend($currentGlobalRevenue, $lastMonthRevenue);
 
-            // Panier moyen (basé sur le TTC global, c'est souvent ce qu'on veut voir)
-            $currentAvgBasket = $currentOrderCount > 0 ? $currentGlobalRevenue / $currentOrderCount : 0;
+            // Panier moyen (basé sur le TTC global sans les frais de livraison)
+            $productRevenueBasket = $currentGlobalRevenue - $currentShippingRevenue;
+            $currentAvgBasket = $currentOrderCount > 0 ? $productRevenueBasket / $currentOrderCount : 0;
 
             // --- 5. MEILLEURES VENTES ---
             $bestSellersRaw = $em->createQueryBuilder()
