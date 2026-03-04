@@ -34,6 +34,31 @@ class OrderController extends AbstractController
     ) {}
 
     /**
+     * SÉCURITÉ INTERNE : Fonction réutilisable pour vérifier si l'utilisateur a le droit de voir/modifier la commande
+     */
+    private function checkOrderAccess(Order $order, Request $request, array $data = []): bool
+    {
+        if ($this->isGranted('ROLE_ADMIN')) {
+            return true; // L'admin a toujours le droit
+        }
+
+        $providedToken = $data['cartToken'] 
+            ?? $request->query->get('cartToken') 
+            ?? $request->cookies->get('cartToken') 
+            ?? $request->cookies->get('cart_token');
+
+        // Nettoyage des fausses valeurs JS
+        if ($providedToken === 'null' || $providedToken === 'undefined') {
+            $providedToken = null;
+        }
+
+        $dbToken = $order->getCartToken();
+
+        // Le token DOIT exister en base, être fourni par l'utilisateur, et correspondre parfaitement
+        return !empty($dbToken) && !empty($providedToken) && $dbToken === $providedToken;
+    }
+
+    /**
      * CRUD: List all orders avec Pagination & Filtres
      */
     #[Route('', name: 'api_order_list', methods: ['GET'])]
@@ -103,8 +128,12 @@ class OrderController extends AbstractController
             return $this->json(['error' => 'Commande introuvable'], 404);
         }
 
-        $shipping = $order->getShippingInfo();
+        // --- SÉCURITÉ ---
+        if (!$this->checkOrderAccess($order, $request)) {
+            return $this->json(['error' => 'Accès non autorisé'], 403);
+        }
 
+        $shipping = $order->getShippingInfo();
         $totalTtc = (float)$order->getTotal();
         $totalTax = round($totalTtc - ($totalTtc / 1.2), 2);
 
@@ -115,7 +144,7 @@ class OrderController extends AbstractController
             $paymentTypeDisplay = "À payer en boutique (Espèces/Comptoir)";
         }
 
-        return $this->json([
+        $response = $this->json([
             'id' => $order->getId(),
             'orderId' => $order->getId(),
             'status' => $order->getStatus(),
@@ -167,6 +196,12 @@ class OrderController extends AbstractController
                 'method' => $p->getMethod() ?? 'Carte Bancaire',
             ], $order->getPayments()->toArray()),
         ]);
+
+        // --- ANTI-CACHE POUR PROTÉGER LA DONNÉE ---
+        $response->headers->set('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+        $response->headers->set('Pragma', 'no-cache');
+        
+        return $response;
     }
 
     /**
@@ -176,6 +211,12 @@ class OrderController extends AbstractController
     public function updateShippingInfo(Order $order, Request $request): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
+
+        // --- SÉCURITÉ ---
+        if (!$this->checkOrderAccess($order, $request, $data)) {
+            return $this->json(['error' => 'Action non autorisée'], 403);
+        }
+
         $method = $data['shippingMethod'] ?? 'pickup';
 
         $order->setShippingMethod($method);
@@ -185,7 +226,6 @@ class OrderController extends AbstractController
             $order->setStatus('created');
         }
 
-        // CORRECTION ICI : On utilise calculateTotal() qui inclut les frais de port
         $order->setTotal($order->calculateTotal());
 
         $shippingInfo = $order->getShippingInfo() ?: new ShippingInfo();
@@ -321,6 +361,11 @@ class OrderController extends AbstractController
     {
         $data = json_decode($request->getContent(), true);
         $cartToken = $data['cartToken'] ?? null;
+
+        if (empty($cartToken) || $cartToken === 'null' || $cartToken === 'undefined') {
+            return $this->json(['error' => 'Token invalide'], 400);
+        }
+
         $cart = $this->em->getRepository(Cart::class)->findOneBy(['token' => $cartToken]);
 
         if (!$cart) return $this->json(['error' => 'Panier introuvable'], 404);
@@ -361,8 +406,13 @@ class OrderController extends AbstractController
      * API: Confirmer une commande en retrait boutique
      */
     #[Route('/{id}/confirm-pickup', name: 'api_order_confirm_pickup', methods: ['POST'])]
-    public function confirmPickup(Order $order, EntityManagerInterface $em, EmailService $emailService, StockService $stockService): JsonResponse
+    public function confirmPickup(Order $order, Request $request, EntityManagerInterface $em, EmailService $emailService, StockService $stockService): JsonResponse
     {
+        // --- SÉCURITÉ ---
+        if (!$this->checkOrderAccess($order, $request)) {
+            return $this->json(['error' => 'Action non autorisée'], 403);
+        }
+
         if ($order->getShippingMethod() !== 'pickup') {
             return $this->json(['error' => 'Cette commande n\'est pas configurée pour un retrait boutique'], 400);
         }
