@@ -8,7 +8,6 @@ use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
 
 #[ORM\Entity(repositoryClass: PaymentRepository::class)]
 #[ORM\Table(name: 'payment')]
-// Cette contrainte empêche d'avoir deux lignes avec le même order_id ET la même method
 #[ORM\UniqueConstraint(name: 'UNIQ_PAYMENT_ORDER_METHOD', columns: ['order_id', 'method'])]
 class Payment
 {
@@ -25,13 +24,13 @@ class Payment
     private ?string $status = 'pending'; // pending, success, failed, refunded
 
     #[ORM\Column(length: 50, nullable: true)]
-    private ?string $method = null; // ex: stripe, paypal, bank_transfer
+    private ?string $method = null; // ex: stripe, paypal
 
     #[ORM\Column(type: 'decimal', precision: 10, scale: 2)]
-    private ?string $amount = null; // montant payé
+    private ?string $amount = null; 
 
     #[ORM\Column(length: 255, nullable: true)]
-    private ?string $transactionId = null; // ID du prestataire de paiement
+    private ?string $transactionId = null; 
 
     #[ORM\Column(type: 'datetime')]
     private \DateTimeInterface $createdAt;
@@ -110,7 +109,8 @@ class Payment
         return $this->updatedAt;
     }
 
-    // --- Méthodes ---
+
+    
     public function isPaid(): bool
     {
         return $this->status === 'success';

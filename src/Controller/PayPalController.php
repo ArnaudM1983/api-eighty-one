@@ -18,6 +18,9 @@ class PayPalController extends AbstractController
 {
     public function __construct(private HttpClientInterface $client) {}
 
+    /**
+     * Determine the base URL depending on the environment (Sandbox vs Live)
+     */
     private function getBaseUrl(): string
     {
         return $this->getParameter('paypal_mode') === 'LIVE'
@@ -25,6 +28,9 @@ class PayPalController extends AbstractController
             : 'https://api-m.sandbox.paypal.com';
     }
 
+    /**
+     * Fetch OAuth2 Access Token from PayPal API
+     */
     private function getAccessToken(): ?string
     {
         $url = $this->getBaseUrl() . '/v1/oauth2/token';
@@ -39,7 +45,10 @@ class PayPalController extends AbstractController
         }
     }
 
-    // 1. CRÉATION
+    /**
+     * CREATE ORDER
+     * Initialize the transaction on PayPal's side and store a pending payment in DB.
+     */
     #[Route('/create/{id}', name: 'api_paypal_create', methods: ['POST'])]
     public function createOrder(Order $order, EntityManagerInterface $em): JsonResponse
     {
@@ -50,6 +59,7 @@ class PayPalController extends AbstractController
                  return $this->json(['error' => 'Commande déjà payée'], 400);
             }
             
+            // Cleanup previous failed or pending attempts
             if ($existingPayment->getStatus() === 'pending') {
                 $em->remove($existingPayment);
                 $em->flush();
@@ -61,7 +71,7 @@ class PayPalController extends AbstractController
 
         $url = $this->getBaseUrl() . '/v2/checkout/orders';
         
-        // CORRECTION ICI : Force le recalcul et le formatage parfait pour PayPal
+        // Recalculate total and format it for PayPal (must be a string with 2 decimals)
         $totalFloat = $order->calculateTotal();
         $order->setTotal($totalFloat);
         $total = number_format($totalFloat, 2, '.', '');
@@ -87,6 +97,7 @@ class PayPalController extends AbstractController
 
             $paypalOrderId = $response->toArray()['id'];
 
+            // Save pending payment record
             $payment = new Payment();
             $payment->setOrder($order);
             $payment->setMethod('paypal');
@@ -104,7 +115,10 @@ class PayPalController extends AbstractController
         }
     }
 
-    // 2. CAPTURE
+    /**
+     * CAPTURE ORDER
+     * Verify the payment success with PayPal, update stock, and send notifications.
+     */
     #[Route('/capture/{id}', name: 'api_paypal_capture', methods: ['POST'])]
     public function captureOrder(Request $request, Order $order, EntityManagerInterface $em, EmailService $emailService, StockService $stockService): JsonResponse
     {
@@ -135,12 +149,15 @@ class PayPalController extends AbstractController
                         return $this->json(['status' => 'COMPLETED']);
                     }
 
+                    // Transactional updates
                     $payment->setStatus('success');
                     $order->setStatus('paid');
                     $em->flush();
 
+                    // Inventory management
                     $stockService->decrementStock($order);
                     
+                    // Automated notifications
                     if ($order->getShippingMethod() === 'pickup') {
                         $emailService->sendPickupConfirmation($order);
                     } else {

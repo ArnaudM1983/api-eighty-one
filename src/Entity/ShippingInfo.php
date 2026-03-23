@@ -18,8 +18,6 @@ class ShippingInfo
     #[ORM\JoinColumn(nullable: false)]
     private ?Order $order = null;
 
-    // --- ADRESSE CLIENT (TOUJOURS UTILISÉE POUR LA FACTURATION) ---
-
     #[ORM\Column(length: 255)]
     #[Assert\NotBlank(message: "L'email est obligatoire.")]
     #[Assert\Email(message: "L'adresse email n'est pas valide.")]
@@ -52,8 +50,6 @@ class ShippingInfo
     #[ORM\Column(length: 20, nullable: true)]
     private ?string $phone = null;
 
-    // --- ADRESSE DU POINT RELAIS (UNIQUEMENT SI MONDIAL RELAY) ---
-
     #[ORM\Column(length: 20, nullable: true)]
     private ?string $pudoId = null;
 
@@ -72,7 +68,7 @@ class ShippingInfo
     #[ORM\Column(length: 100, nullable: true)]
     private ?string $pudoCountry = null;
 
-    // --- Getters / Setters existants ---
+    // --- Getters / Setters  ---
     public function getId(): ?int
     {
         return $this->id;

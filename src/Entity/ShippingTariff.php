@@ -17,15 +17,12 @@ class ShippingTariff
     #[ORM\Column(length: 2)]
     private ?string $countryCode = null;
 
-    // Type de livraison ('pr' pour Point Relais, 'locker' pour Locker)
     #[ORM\Column(length: 20)]
     private ?string $modeCode = null;
 
-    // Poids maximal en grammes pour ce tarif (le palier)
     #[ORM\Column]
     private ?int $weightMaxG = null;
 
-    // Prix Hors Taxes du tarif
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 2)]
     private ?string $priceHt = null;
     

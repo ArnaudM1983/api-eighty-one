@@ -18,7 +18,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Annotation\Route;
 use App\Service\StockService;
-use Stripe\Stripe;            
+use Stripe\Stripe;
 use Stripe\Refund;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
@@ -34,32 +34,32 @@ class OrderController extends AbstractController
     ) {}
 
     /**
-     * SÉCURITÉ INTERNE : Fonction réutilisable pour vérifier si l'utilisateur a le droit de voir/modifier la commande
+     * INTERNAL SECURITY: Checks if the current user/client has permission to access or modify a specific order.
      */
     private function checkOrderAccess(Order $order, Request $request, array $data = []): bool
     {
         if ($this->isGranted('ROLE_ADMIN')) {
-            return true; // L'admin a toujours le droit
+            return true;
         }
 
-        $providedToken = $data['cartToken'] 
-            ?? $request->query->get('cartToken') 
-            ?? $request->cookies->get('cartToken') 
+        $providedToken = $data['cartToken']
+            ?? $request->query->get('cartToken')
+            ?? $request->cookies->get('cartToken')
             ?? $request->cookies->get('cart_token');
 
-        // Nettoyage des fausses valeurs JS
+        // Sanitize JavaScript "null/undefined" strings
         if ($providedToken === 'null' || $providedToken === 'undefined') {
             $providedToken = null;
         }
 
         $dbToken = $order->getCartToken();
 
-        // Le token DOIT exister en base, être fourni par l'utilisateur, et correspondre parfaitement
+        // Token must exist in DB, be provided by user, and match perfectly
         return !empty($dbToken) && !empty($providedToken) && $dbToken === $providedToken;
     }
 
     /**
-     * CRUD: List all orders avec Pagination & Filtres
+     * CRUD: List all orders with Pagination & Search Filters (Admin only)
      */
     #[Route('', name: 'api_order_list', methods: ['GET'])]
     #[IsGranted('ROLE_ADMIN')]
@@ -68,22 +68,25 @@ class OrderController extends AbstractController
         $qb = $repo->createQueryBuilder('o')
             ->orderBy('o.createdAt', 'DESC');
 
+        // Search by ID or Customer info
         if ($q = $request->query->get('q')) {
             $qb->leftJoin('o.shippingInfo', 's')
-               ->andWhere('
+                ->andWhere('
                    o.id LIKE :q OR 
                    s.firstName LIKE :q OR 
                    s.lastName LIKE :q OR
                    s.email LIKE :q
                ')
-               ->setParameter('q', '%' . $q . '%');
+                ->setParameter('q', '%' . $q . '%');
         }
 
+        // Filter by order status
         if ($status = $request->query->get('status')) {
             $qb->andWhere('o.status = :status')
-               ->setParameter('status', $status);
+                ->setParameter('status', $status);
         }
 
+        // Pagination logic
         $countQb = clone $qb;
         $total = $countQb->select('count(o.id)')->getQuery()->getSingleScalarResult();
 
@@ -128,7 +131,6 @@ class OrderController extends AbstractController
             return $this->json(['error' => 'Commande introuvable'], 404);
         }
 
-        // --- SÉCURITÉ ---
         if (!$this->checkOrderAccess($order, $request)) {
             return $this->json(['error' => 'Accès non autorisé'], 403);
         }
@@ -197,22 +199,21 @@ class OrderController extends AbstractController
             ], $order->getPayments()->toArray()),
         ]);
 
-        // --- ANTI-CACHE POUR PROTÉGER LA DONNÉE ---
+        // --- SECURITY HEADERS TO PROTECT CUSTOMER DATA ---
         $response->headers->set('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
         $response->headers->set('Pragma', 'no-cache');
-        
+
         return $response;
     }
 
     /**
-     * API: Update Shipping Info
+     * API: Update Shipping Information and Recalculate Totals
      */
     #[Route('/{id}/shipping', name: 'api_order_update_shipping', methods: ['POST'])]
     public function updateShippingInfo(Order $order, Request $request): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
 
-        // --- SÉCURITÉ ---
         if (!$this->checkOrderAccess($order, $request, $data)) {
             return $this->json(['error' => 'Action non autorisée'], 403);
         }
@@ -239,6 +240,7 @@ class OrderController extends AbstractController
         $shippingInfo->setCountry($data['country'] ?? 'FR');
         $shippingInfo->setPhone($data['phone'] ?? null);
 
+        // Handle Pick-up Point (PUDO) data if applicable
         if (isset($data['pudoId'])) {
             $shippingInfo->setPudoId($data['pudoId']);
             $shippingInfo->setPudoName($data['pudoName']);
@@ -256,17 +258,16 @@ class OrderController extends AbstractController
     }
 
     /**
-     * API: Update Status (Dashboard Admin)
+     * API: Update Order Status, Manage Stock, and Process Stripe Refunds (Admin Dashboard)
      */
     #[Route('/{id}/status', name: 'api_order_update_status', methods: ['PATCH', 'PUT', 'POST'])]
     #[IsGranted('ROLE_ADMIN')]
     public function updateStatus(
-        Order $order, 
-        Request $request, 
-        EntityManagerInterface $em, 
-        StockService $stockService 
-    ): JsonResponse
-    {
+        Order $order,
+        Request $request,
+        EntityManagerInterface $em,
+        StockService $stockService
+    ): JsonResponse {
         $data = json_decode($request->getContent(), true);
         $newStatus = $data['status'] ?? null;
         $oldStatus = $order->getStatus();
@@ -276,17 +277,18 @@ class OrderController extends AbstractController
             return $this->json(['error' => 'Statut invalide'], 400);
         }
 
+        // --- CANCELLATION LOGIC: Stock Recovery & Stripe Refund ---
         if ($newStatus === 'cancelled' && $oldStatus !== 'cancelled') {
-            
-            $wasReserved = in_array($oldStatus, ['paid', 'shipped', 'completed']) 
-                           || ($oldStatus === 'created' && $order->getShippingMethod() === 'pickup');
+
+            $wasReserved = in_array($oldStatus, ['paid', 'shipped', 'completed'])
+                || ($oldStatus === 'created' && $order->getShippingMethod() === 'pickup');
 
             if ($wasReserved) {
                 $stockService->incrementStock($order);
             }
 
             $stripePayment = $em->getRepository(Payment::class)->findOneBy([
-                'order' => $order, 
+                'order' => $order,
                 'method' => 'stripe',
                 'status' => 'success'
             ]);
@@ -294,7 +296,7 @@ class OrderController extends AbstractController
             if ($stripePayment) {
                 try {
                     Stripe::setApiKey($this->getParameter('stripe_secret_key'));
-                    
+
                     Refund::create([
                         'payment_intent' => $stripePayment->getTransactionId(),
                         'reason' => 'requested_by_customer',
@@ -302,7 +304,6 @@ class OrderController extends AbstractController
 
                     $stripePayment->setStatus('refunded');
                     $stripePayment->setUpdatedAt(new \DateTimeImmutable());
-
                 } catch (\Exception $e) {
                     return $this->json([
                         'error' => 'Erreur critique lors du remboursement Stripe : ' . $e->getMessage()
@@ -311,6 +312,7 @@ class OrderController extends AbstractController
             }
         }
 
+        // --- LOGISTICS: Transition to Shipped for In-store Pickup ---
         if ($newStatus === 'shipped' && $newStatus !== 'cancelled' && $order->getShippingMethod() === 'pickup' && $oldStatus === 'created') {
             $existingPayments = $em->getRepository(Payment::class)->findBy(['order' => $order]);
             foreach ($existingPayments as $p) {
@@ -335,6 +337,7 @@ class OrderController extends AbstractController
         $order->setUpdatedAt(new \DateTimeImmutable());
         $em->flush();
 
+        // Send automated invoice on shipment
         if ($newStatus === 'shipped' && $oldStatus !== 'shipped') {
             try {
                 $em->refresh($order);
@@ -347,14 +350,14 @@ class OrderController extends AbstractController
         return $this->json([
             'success' => true,
             'newStatus' => $order->getStatus(),
-            'message' => $newStatus === 'cancelled' 
-                ? 'Commande annulée. Stock rétabli et remboursement effectué (si éligible).' 
+            'message' => $newStatus === 'cancelled'
+                ? 'Commande annulée. Stock rétabli et remboursement effectué (si éligible).'
                 : 'Statut mis à jour avec succès.'
         ]);
     }
 
     /**
-     * CRUD: Create Order
+     * CRUD: Initialize Order from Cart items
      */
     #[Route('/create', name: 'api_order_create', methods: ['POST'])]
     public function createOrder(Request $request): JsonResponse
@@ -403,12 +406,11 @@ class OrderController extends AbstractController
     }
 
     /**
-     * API: Confirmer une commande en retrait boutique
+     * API: Confirm an In-store Pickup order and trigger notifications
      */
     #[Route('/{id}/confirm-pickup', name: 'api_order_confirm_pickup', methods: ['POST'])]
     public function confirmPickup(Order $order, Request $request, EntityManagerInterface $em, EmailService $emailService, StockService $stockService): JsonResponse
     {
-        // --- SÉCURITÉ ---
         if (!$this->checkOrderAccess($order, $request)) {
             return $this->json(['error' => 'Action non autorisée'], 403);
         }
@@ -440,7 +442,7 @@ class OrderController extends AbstractController
     }
 
     /**
-     * API: Calculate Shipping
+     * API: Calculate Shipping Costs based on weight, mode, and country
      */
     #[Route('/shipping/calculate', name: 'api_shipping_calculate', methods: ['POST'])]
     public function calculateShipping(Request $request): JsonResponse
@@ -459,7 +461,7 @@ class OrderController extends AbstractController
     }
 
     /**
-     * API: Search Mondial Relay PUDOs
+     * API: Search for Mondial Relay Pick-up Points (PUDO)
      */
     #[Route('/pudo/search', name: 'api_order_pudo_search', methods: ['POST'])]
     public function searchPudos(Request $request): JsonResponse
@@ -478,7 +480,7 @@ class OrderController extends AbstractController
     }
 
     /**
-     * API: Search Colissimo PUDOs
+     * API: Search for Colissimo Pick-up Points (PUDO)
      */
     #[Route('/pudo/colissimo/search', name: 'api_order_colissimo_search', methods: ['POST'])]
     public function searchColissimoPudos(Request $request): JsonResponse

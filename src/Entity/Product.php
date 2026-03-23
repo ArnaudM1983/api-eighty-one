@@ -63,7 +63,6 @@ class Product
     #[ORM\ManyToMany(targetEntity: Category::class, inversedBy: 'products')]
     private Collection $categories;
 
-    // --- NOUVEAU : Produits Associés (Cross-Sell) ---
     #[ORM\ManyToMany(targetEntity: self::class)]
     #[ORM\JoinTable(name: 'product_related')]
     private Collection $relatedProducts;
@@ -73,7 +72,7 @@ class Product
         $this->variants = new ArrayCollection();
         $this->images = new ArrayCollection();
         $this->categories = new ArrayCollection();
-        $this->relatedProducts = new ArrayCollection(); // Initialisation
+        $this->relatedProducts = new ArrayCollection(); 
         $this->createdAt = new \DateTimeImmutable();
         $this->updatedAt = new \DateTimeImmutable();
     }
@@ -305,7 +304,6 @@ class Product
         return $this;
     }
 
-    // --- METHODES NOUVELLES : GESTION DES PRODUITS ASSOCIÉS ---
 
     /** @return Collection|self[] */
     public function getRelatedProducts(): Collection

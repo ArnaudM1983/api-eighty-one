@@ -7,11 +7,9 @@ use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 
 class TariffCalculatorService
 {
-    // Déclaration des propriétés
     private ShippingTariffRepository $shippingTariffRepository;
     private ParameterBagInterface $parameterBag;
 
-    // Taux de TVA 
     private const TVA_RATE_FRANCE = 0.20; 
 
     public function __construct(
@@ -51,7 +49,6 @@ class TariffCalculatorService
 
         $priceHt = (float) $tariff->getPriceHt();
         
-        // Application de la TVA
         $tvaRate = self::TVA_RATE_FRANCE; 
         
         $priceTtc = $priceHt * (1 + $tvaRate);

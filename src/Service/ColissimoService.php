@@ -15,7 +15,8 @@ class ColissimoService
     ) {}
 
     /**
-     * Recherche les points de retrait et parse les horaires.
+     * Searches for Colissimo pick-up points and parses opening hours.
+     * * @return array List of formatted pick-up points or error details
      */
     public function searchPointsRetrait(
         string $address,
@@ -106,11 +107,12 @@ class ColissimoService
     }
 
     /**
-     * Transforme la chaîne Colissimo "09:00-12:00 14:00-18:00" en objet structuré.
+     * Parses Colissimo's specific hour string format "09:00-12:00 14:00-18:00"
+     * into a structured object for the Front-end.
      */
     private function parseColissimoHours(string $openingString): ?array
     {
-        // Nettoyage des espaces et suppression des valeurs nulles
+        // Clean whitespace and handle empty values
         $s = trim(preg_replace('/\s+/', ' ', $openingString));
         
         if (empty($s) || $s === '00:00-00:00 00:00-00:00') {
@@ -121,7 +123,7 @@ class ColissimoService
         $morning = $parts[0] ?? '00:00-00:00';
         $afternoon = $parts[1] ?? '00:00-00:00';
 
-        // Helper interne pour extraire et formater (ex: "09:00" -> "0900")
+        // Helper to extract and format times (e.g., "09:00" -> "0900")
         $extract = function($range) {
             $times = explode('-', $range);
             $start = $times[0] ?? '00:00';
@@ -136,7 +138,6 @@ class ColissimoService
         $am = $extract($morning);
         $pm = $extract($afternoon);
 
-        // Si aucune heure valide n'est trouvée
         if (!$am['start'] && !$pm['start']) {
             return null;
         }

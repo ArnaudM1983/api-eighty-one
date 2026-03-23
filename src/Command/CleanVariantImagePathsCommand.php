@@ -36,7 +36,7 @@ class CleanVariantImagePathsCommand extends Command
         }
 
         $this->em->flush();
-        $output->writeln("✅ $count variant images updated to local paths.");
+        $output->writeln("$count variant images updated to local paths.");
 
         return Command::SUCCESS;
     }

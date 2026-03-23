@@ -17,7 +17,8 @@ class EmailService
     ) {}
 
     /**
-     * Méthode interne pour centraliser l'envoi et le log d'erreur
+     * Internal helper to centralize email sending and custom logging.
+     * Logs success or failure to a dedicated debug file.
      */
     private function safeSend(TemplatedEmail $email, string $label, int $orderId): void
     {
@@ -33,6 +34,9 @@ class EmailService
         }
     }
 
+    /**
+     * Sends a standard order confirmation to the customer.
+     */
     public function sendOrderConfirmation(Order $order): void
     {
         $shippingInfo = $order->getShippingInfo();
@@ -49,9 +53,11 @@ class EmailService
         $this->safeSend($email, "Mail Client Confirmation", $order->getId());
     }
 
+    /**
+     * Notifies the administrator that a new order needs processing.
+     */
     public function sendAdminNotification(Order $order): void
     {
-        // Forcer le chargement pour éviter les Lazy Loading Errors
         foreach ($order->getItems() as $item) {
             if ($item->getProduct()) $item->getProduct()->getName();
             if ($item->getVariant()) $item->getVariant()->getName();
@@ -67,6 +73,9 @@ class EmailService
         $this->safeSend($email, "Mail Admin Notification", $order->getId());
     }
 
+    /**
+     * Informs the customer that their order has been shipped.
+     */
     public function sendShippingNotification(Order $order): void
     {
         $shippingInfo = $order->getShippingInfo();
@@ -83,6 +92,9 @@ class EmailService
         $this->safeSend($email, "Mail Client Expédition", $order->getId());
     }
 
+    /**
+     * Sends a confirmation for in-store pickup orders.
+     */
     public function sendPickupConfirmation(Order $order): void
     {
         $shippingInfo = $order->getShippingInfo();
@@ -99,6 +111,9 @@ class EmailService
         $this->safeSend($email, "Mail Client Pickup", $order->getId());
     }
 
+    /**
+     * Sends the electronic invoice to the customer.
+     */
     public function sendInvoiceNotification(Order $order): void
     {
         $shippingInfo = $order->getShippingInfo();
@@ -118,6 +133,9 @@ class EmailService
         $this->safeSend($email, "Mail Client Facture", $order->getId());
     }
 
+    /**
+     * Notifies the administrator of an action required for a pickup order (e.g., payment at counter).
+     */
     public function sendAdminPickupNotification(Order $order): void
     {
         foreach ($order->getItems() as $item) {

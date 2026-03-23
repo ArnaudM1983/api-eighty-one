@@ -36,9 +36,6 @@ class ShippingInfoRepository extends ServiceEntityRepository
         }
     }
 
-    /**
-     * Retourne la ShippingInfo associée à une commande spécifique
-     */
     public function findByOrderId(int $orderId): ?ShippingInfo
     {
         return $this->createQueryBuilder('s')
@@ -48,9 +45,6 @@ class ShippingInfoRepository extends ServiceEntityRepository
             ->getOneOrNullResult();
     }
 
-    /**
-     * Exemple : rechercher toutes les commandes expédiées dans un pays donné
-     */
     public function findByCountry(string $country): array
     {
         return $this->createQueryBuilder('s')

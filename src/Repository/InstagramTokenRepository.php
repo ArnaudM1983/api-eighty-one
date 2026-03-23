@@ -13,9 +13,6 @@ class InstagramTokenRepository extends ServiceEntityRepository
         parent::__construct($registry, InstagramToken::class);
     }
 
-    /**
-     * Récupère le dernier token stocké
-     */
     public function findLatest(): ?InstagramToken
     {
         return $this->createQueryBuilder('t')
@@ -25,9 +22,6 @@ class InstagramTokenRepository extends ServiceEntityRepository
             ->getOneOrNullResult();
     }
 
-    /**
-     * Vérifie si le dernier token est encore valide
-     */
     public function getValidToken(): ?string
     {
         $token = $this->findLatest();

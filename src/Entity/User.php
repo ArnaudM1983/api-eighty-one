@@ -8,7 +8,6 @@ use Symfony\Component\Security\Core\User\UserInterface;
 use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
 
 #[ORM\Entity(repositoryClass: UserRepository::class)]
-// 👇 C'EST ICI QUE C'ÉTAIT MANQUANT 👇
 class User implements UserInterface, PasswordAuthenticatedUserInterface
 {
     #[ORM\Id]
@@ -55,7 +54,6 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function getRoles(): array
     {
         $roles = $this->roles;
-        // garantit que chaque utilisateur a au moins ROLE_USER
         if (!in_array('ROLE_USER', $roles)) {
             $roles[] = 'ROLE_USER';
         }
@@ -101,10 +99,8 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         return $this;
     }
 
-    // J'ai ajouté ': void' ici pour respecter strictement l'interface
     public function eraseCredentials(): void
     {
-        // Si vous stockez des données sensibles temporaires sur l'utilisateur, effacez-les ici
         // $this->plainPassword = null;
     }
 }

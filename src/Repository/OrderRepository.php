@@ -22,7 +22,6 @@ class OrderRepository extends ServiceEntityRepository
         parent::__construct($registry, Order::class);
     }
 
-    // Exemple : récupérer toutes les commandes d'un utilisateur
     public function findByUser(User $user): array
     {
         return $this->createQueryBuilder('o')
@@ -33,7 +32,6 @@ class OrderRepository extends ServiceEntityRepository
             ->getResult();
     }
 
-    // Exemple : récupérer toutes les commandes avec un certain statut
     public function findByStatus(string $status): array
     {
         return $this->createQueryBuilder('o')
@@ -44,7 +42,6 @@ class OrderRepository extends ServiceEntityRepository
             ->getResult();
     }
 
-    // Exemple : récupérer les commandes récentes (limit)
     public function findRecentOrders(int $limit = 10): array
     {
         return $this->createQueryBuilder('o')
@@ -54,9 +51,6 @@ class OrderRepository extends ServiceEntityRepository
             ->getResult();
     }
 
-    /**
-     * Calcule le CA des commandes payées depuis le 1er du mois
-     */
     public function getRevenueSince(\DateTimeInterface $date): float
     {
         $result = $this->createQueryBuilder('o')
@@ -66,13 +60,9 @@ class OrderRepository extends ServiceEntityRepository
             ->getQuery()
             ->getSingleScalarResult();
 
-        // Si le résultat est null (pas de commandes), on retourne 0.0
         return (float) ($result ?? 0.0);
     }
 
-    /**
-     * Compte le nombre de commandes depuis le 1er du mois
-     */
     public function countSince(\DateTimeInterface $date): int
     {
         return (int) $this->createQueryBuilder('o')
@@ -83,9 +73,6 @@ class OrderRepository extends ServiceEntityRepository
             ->getSingleScalarResult();
     }
 
-    /**
-     * Calcule le CA entre deux dates précises
-     */
     public function getRevenueBetween(\DateTime $start, \DateTime $end): ?float
     {
         return (float) $this->createQueryBuilder('o')
@@ -97,9 +84,6 @@ class OrderRepository extends ServiceEntityRepository
             ->getSingleScalarResult();
     }
 
-    /**
-     * Compte le nombre de commandes entre deux dates précises
-     */
     public function countBetween(\DateTime $start, \DateTime $end): ?int
     {
         return (int) $this->createQueryBuilder('o')
@@ -111,5 +95,4 @@ class OrderRepository extends ServiceEntityRepository
             ->getSingleScalarResult();
     }
 
-    // Ajout d'autres méthodes personnalisées ici
 }

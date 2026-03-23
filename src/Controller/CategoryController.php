@@ -24,7 +24,9 @@ class CategoryController extends AbstractController
     }
 
     /**
-     * Utilisé pour le sélecteur dans ProductEdit (Structure Arbre)
+     * Provides a hierarchical tree structure of categories.
+     * Primarily used by the Front-end (Next.js) and Admin Selectors 
+     * to display nested categories (Parent > Children).
      */
     #[Route('', methods: ['GET'])]
     public function index(): JsonResponse
@@ -44,7 +46,9 @@ class CategoryController extends AbstractController
     }
 
     /**
-     * Utilisé par Refine pour la page CategoryList (Structure Plate)
+     * Provides a list of all categories for administrative purposes.
+     * Primarily used by the Admin Dashboard (Refine) for data tables, 
+     * filtering, and simplified parent-child management.
      */
     #[Route('/admin', methods: ['GET'], priority: 2)]
     public function adminList(): JsonResponse
@@ -55,14 +59,14 @@ class CategoryController extends AbstractController
             'id' => $c->getId(),
             'name' => $c->getName(),
             'slug' => $c->getSlug(),
-            'parentId' => $c->getParent()?->getId(), // ID simple pour le selecteur
+            'parentId' => $c->getParent()?->getId(), 
         ], $categories);
 
         return $this->json($data);
     }
 
     /**
-     * Récupérer une seule catégorie pour le formulaire Edit
+     * Retrieve a single category for the Edit form
      */
     #[Route('/{id}', methods: ['GET'])]
     public function getOne(Category $category): JsonResponse
@@ -76,7 +80,7 @@ class CategoryController extends AbstractController
     }
 
     /**
-     * Créer une catégorie ou sous-catégorie
+     * Create a new category or sub-category
      */
     #[Route('', methods: ['POST'])]
     #[IsGranted('ROLE_ADMIN')]
@@ -102,7 +106,7 @@ class CategoryController extends AbstractController
     }
 
     /**
-     * Mettre à jour une catégorie
+     * Update an existing category
      */
     #[Route('/{id}', methods: ['PATCH', 'PUT'])]
     #[IsGranted('ROLE_ADMIN')]
@@ -113,11 +117,11 @@ class CategoryController extends AbstractController
         if (isset($data['name'])) $category->setName($data['name']);
         if (isset($data['slug'])) $category->setSlug($data['slug']);
         
-        // Gestion du changement de parent
+        // Handle parent changes with security check
         if (array_key_exists('parentId', $data)) {
             $parent = $data['parentId'] ? $this->repo->find($data['parentId']) : null;
             
-            // Sécurité : on ne peut pas être son propre parent
+            // Security: A category cannot be its own parent
             if ($parent && $parent->getId() === $category->getId()) {
                 return $this->json(['error' => 'Une catégorie ne peut pas être son propre parent'], 400);
             }
@@ -131,14 +135,12 @@ class CategoryController extends AbstractController
     }
 
     /**
-     * Supprimer une catégorie
+     * Delete a category
      */
     #[Route('/{id}', methods: ['DELETE'])]
     #[IsGranted('ROLE_ADMIN')]
     public function delete(Category $category): JsonResponse
     {
-        // Note: Si une catégorie parente est supprimée, les enfants deviennent orphelins 
-        // ou sont supprimés selon votre config orphanRemoval.
         $this->em->remove($category);
         $this->em->flush();
 

@@ -21,7 +21,6 @@ class CategoryRepository extends ServiceEntityRepository
         parent::__construct($registry, Category::class);
     }
 
-    // Exemple : récupérer les catégories parentes (sans parent)
     public function findParentCategories(): array
     {
         return $this->createQueryBuilder('c')
@@ -31,7 +30,6 @@ class CategoryRepository extends ServiceEntityRepository
             ->getResult();
     }
 
-    // Exemple : récupérer les enfants d'une catégorie
     public function findChildren(int $parentId): array
     {
         return $this->createQueryBuilder('c')
@@ -42,5 +40,4 @@ class CategoryRepository extends ServiceEntityRepository
             ->getResult();
     }
 
-    // Tu peux ajouter d'autres méthodes personnalisées selon tes besoins
 }

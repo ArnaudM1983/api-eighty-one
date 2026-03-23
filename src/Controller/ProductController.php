@@ -28,7 +28,7 @@ class ProductController extends AbstractController
     }
 
     /**
-     * CRUD: Read (List)
+     * CRUD: List products with filters, search, and pagination.
      */
     #[Route('', methods: ['GET'])]
     public function getAll(Request $request): JsonResponse
@@ -37,11 +37,13 @@ class ProductController extends AbstractController
             ->leftJoin('p.variants', 'v')
             ->addSelect('v');
 
+        // Filter by featured status
         if ($request->query->get('featured') === 'true') {
             $qb->andWhere('p.featured = :featured')
                 ->setParameter('featured', true);
         }
 
+        // Advanced multi-keyword search (Name, SKU)
         if ($q = $request->query->get('q')) {
             $keywords = array_filter(explode(' ', $q));
             foreach ($keywords as $index => $word) {
@@ -56,6 +58,7 @@ class ProductController extends AbstractController
             }
         }
 
+        // Pagination settings
         $page = (int) $request->query->get('_page', 1);
         $limit = (int) $request->query->get('_limit', 20);
         $offset = ($page - 1) * $limit;
@@ -79,7 +82,7 @@ class ProductController extends AbstractController
     }
 
     /**
-     * CRUD: Search
+     * CRUD: Simple search by name.
      */
     #[Route('/search', methods: ['GET'])]
     public function search(Request $request): JsonResponse
@@ -102,7 +105,7 @@ class ProductController extends AbstractController
     }
 
     /**
-     * CRUD: Get One by ID
+     * CRUD: Retrieve a single product by ID.
      */
     #[Route('/{id}', methods: ['GET'])]
     public function getOne(Product $product): JsonResponse
@@ -111,7 +114,7 @@ class ProductController extends AbstractController
     }
 
     /**
-     * CRUD: Get One by Slug
+     * CRUD: Retrieve a single product by Slug.
      */
     #[Route('/slug/{slug}', methods: ['GET'])]
     public function getBySlug(string $slug): JsonResponse
@@ -127,7 +130,7 @@ class ProductController extends AbstractController
 
 
     /**
-     * CRUD: Create
+     * CRUD: Create a new product with categories, images, and related products.
      */
     #[Route('', methods: ['POST'])]
     #[IsGranted('ROLE_ADMIN')]
@@ -147,13 +150,13 @@ class ProductController extends AbstractController
         $product->setFeatured($data['featured'] ?? false);
         $product->setMainImage($data['main_image'] ?? null);
 
-        // Categories
+        // Assign Categories
         foreach ($data['category_ids'] ?? [] as $catId) {
             $category = $this->em->getRepository(Category::class)->find($catId);
             if ($category) $product->addCategory($category);
         }
 
-        // Images
+        // Handle Gallery Images
         foreach ($data['images'] ?? [] as $imgData) {
             $image = new ProductImage();
             $image->setUrl($imgData['url']);
@@ -161,7 +164,7 @@ class ProductController extends AbstractController
             $product->addImage($image);
         }
 
-        // --- NOUVEAU : Produits Associés à la création ---
+        // Handle Related Products
         if (isset($data['related_product_ids']) && is_array($data['related_product_ids'])) {
             foreach ($data['related_product_ids'] as $relatedId) {
                 $relatedProd = $this->repo->find($relatedId);
@@ -179,7 +182,7 @@ class ProductController extends AbstractController
 
 
     /**
-     * CRUD: Update
+     * CRUD: Update an existing product and synchronize variants.
      */
     #[Route('/{id}', methods: ['PUT'])]
     #[IsGranted('ROLE_ADMIN')]
@@ -187,16 +190,16 @@ class ProductController extends AbstractController
     {
         $data = json_decode($request->getContent(), true);
 
-        // Mise à jour des champs basiques
         if (isset($data['name'])) $product->setName($data['name']);
         if (isset($data['slug'])) $product->setSlug($data['slug']);
         if (isset($data['description'])) $product->setDescription($data['description']);
         if (isset($data['excerpt'])) $product->setExcerpt($data['excerpt']);
         if (isset($data['sku'])) $product->setSku($data['sku']);
+
+        // Price Synchronization with variants
         if (isset($data['price'])) {
             $newPrice = $data['price'];
             $product->setPrice($newPrice);
-            // SYNCHRONISATION DES VARIANTES
             foreach ($product->getVariants() as $variant) {
                 $variant->setPrice($newPrice);
             }
@@ -206,7 +209,7 @@ class ProductController extends AbstractController
         if (isset($data['featured'])) $product->setFeatured($data['featured']);
         if (isset($data['main_image'])) $product->setMainImage($data['main_image']);
 
-        // Update des catégories
+        // Update Categories
         if (isset($data['category_ids'])) {
             foreach ($product->getCategories() as $category) {
                 $product->removeCategory($category);
@@ -219,7 +222,7 @@ class ProductController extends AbstractController
             }
         }
 
-        // Update des images
+        // Update Gallery Images
         if (isset($data['images'])) {
             $currentImages = $product->getImages();
             foreach ($currentImages as $image) {
@@ -236,17 +239,13 @@ class ProductController extends AbstractController
             }
         }
 
-        // --- NOUVEAU : Update des Produits Associés ---
+        // Update Related Products
         if (isset($data['related_product_ids']) && is_array($data['related_product_ids'])) {
-            // 1. On nettoie les anciennes relations
             foreach ($product->getRelatedProducts() as $related) {
                 $product->removeRelatedProduct($related);
             }
-
-            // 2. On ajoute les nouvelles
             foreach ($data['related_product_ids'] as $relatedId) {
                 $relatedProd = $this->repo->find($relatedId);
-                // On s'assure que le produit existe et qu'on ne lie pas le produit à lui-même
                 if ($relatedProd && $relatedProd->getId() !== $product->getId()) {
                     $product->addRelatedProduct($relatedProd);
                 }
@@ -261,7 +260,7 @@ class ProductController extends AbstractController
     }
 
     /**
-     * CRUD: Delete
+     * CRUD: Delete a product.
      */
     #[Route('/{id}', methods: ['DELETE'])]
     #[IsGranted('ROLE_ADMIN')]
@@ -274,7 +273,7 @@ class ProductController extends AbstractController
     }
 
     /**
-     * Get by Category
+     * Retrieve products belonging to a specific category.
      */
     #[Route('/category/{slug}', methods: ['GET'])]
     public function getByCategory(string $slug, CategoryRepository $categoryRepo): JsonResponse
@@ -301,7 +300,7 @@ class ProductController extends AbstractController
     }
 
     /**
-     * Update Stock
+     * Update product stock level (Admin Patch).
      */
     #[Route('/{id}', methods: ['PATCH'])]
     #[IsGranted('ROLE_ADMIN')]
@@ -321,7 +320,7 @@ class ProductController extends AbstractController
     }
 
     /**
-     * Reorder
+     * Bulk reorder product positions.
      */
     #[Route('/reorder', methods: ['POST'])]
     #[IsGranted('ROLE_ADMIN')]
@@ -345,7 +344,9 @@ class ProductController extends AbstractController
         return $this->json(['message' => 'Order updated successfully']);
     }
 
-    // Serializer Léger (pour les listes)
+    /**
+     * Lightweight Serializer for listings.
+     */
     private function serializeProductWithoutVariants(Product $product): array
     {
         $variants = $product->getVariants();
@@ -375,7 +376,9 @@ class ProductController extends AbstractController
         ];
     }
 
-    // Serializer Complet (pour le détail)
+    /**
+     * Full Serializer for detailed product views.
+     */
     private function serializeProduct(Product $p): array
     {
         $formatImagePath = fn(?string $path) => $path ? '/' . ltrim($path, '/') : null;
@@ -425,7 +428,6 @@ class ProductController extends AbstractController
             'stock' => $totalStock,
             'has_variants' => count($variants) > 0,
 
-            // --- NOUVEAU : Sérialisation des produits liés ---
             'related_products' => $p->getRelatedProducts()->map(fn($rp) => [
                 'id' => $rp->getId(),
                 'name' => $rp->getName(),

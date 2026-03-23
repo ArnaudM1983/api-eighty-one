@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Service; 
+namespace App\Service;
 
 use Exception;
 use Psr\Log\LoggerInterface;
@@ -8,18 +8,18 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 
 /**
- * SERVICE : MondialRelayService (Backend - Symfony)
- * * RÔLE :
- * 1. Interface unique pour communiquer avec l'API SOAP de Mondial Relay (WSI4).
- * 2. Gérer l'authentification et le calcul des hashs MD5 requis.
- * 3. Construire et envoyer les requêtes SOAP (e.g., recherche de Points Relais).
- * 4. Parser la réponse XML reçue et la convertir en un tableau PHP standard.
- * 5. Gérer les erreurs de statut HTTP et les erreurs internes de code STAT.
+ * SERVICE: MondialRelayService (Backend - Symfony)
+ * ROLE:
+ * 1. Single interface to communicate with Mondial Relay SOAP API (WSI4).
+ * 2. Manage authentication and mandatory MD5 security hashes.
+ * 3. Build and send SOAP requests (e.g., Pick-up point search).
+ * 4. Parse XML responses into standard PHP arrays.
+ * 5. Handle HTTP status errors and internal API 'STAT' error codes.
  */
 
 class MondialRelayService
 {
-    // --- CONSTANTES D'AUTHENTIFICATION & D'ACTION ---
+    // --- AUTHENTICATION & ACTION CONSTANTS ---
     private const ENSEIGNE = 'CC22ZCS1';
     private const CLE_PRIVEE = 'iva9oG9F';
     private const ACTION_CODE = '24R';
@@ -31,13 +31,12 @@ class MondialRelayService
         private LoggerInterface $logger
     ) {}
 
-    // ----------------------------------------------------------------------------------
-    // 1. RECHERCHE DES POINTS RELAIS
-    // ----------------------------------------------------------------------------------
-
+    /**
+     * Search for nearby Pick-up Points (Points Relais).
+     */
     public function searchPointsRelais(string $postalCode, string $countryCode, float $weightInKg): array
     {
-        // Paramètres pour le hash MD5
+        // Parameters for MD5 Hash
         $numPointRelais = '';
         $ville = '';
         $latitude = '';
@@ -51,12 +50,12 @@ class MondialRelayService
         $rayonRecherche = '50';
         $nombreResultats = '30';
 
-        // --- SÉCURISATION DES CONSTANTES ---
+        // --- SECURITY: CREDENTIALS SANITIZATION ---
         $enseigne = trim(self::ENSEIGNE);
         $clePrivee = trim(self::CLE_PRIVEE);
         // ------------------------------------
 
-        // 1. Construction de la Chaîne pour le Hash MD5 (ORDRE CRITIQUE MR WSI4)
+        // 1. Construct the MD5 Hash String (STRICT MR WSI4 ORDER)
         $concatString = $enseigne
             . $countryCode . $numPointRelais . $ville . $postalCode . $latitude . $longitude . $taille
             . $poidsHashValue
@@ -65,10 +64,10 @@ class MondialRelayService
 
         $this->logger->info("MR MD5 String (COMPLETE): " . $concatString);
 
-        // 2. Calcul du Hash MD5 en MAJUSCULES
+        // 2. Compute MD5 Hash in UPPERCASE
         $securityHash = strtoupper(md5($concatString));
 
-        // 3. Construction du corps SOAP
+        // 3. Build SOAP Envelope
         $xmlBody = $this->buildSoapRequest(
             $postalCode,
             $countryCode,
@@ -77,7 +76,7 @@ class MondialRelayService
         );
 
         try {
-            // 4. Appel HTTP au Web Service
+            // 4. HTTP POST request to the Web Service
             $response = $this->httpClient->request('POST', 'https://api.mondialrelay.com/Web_Services.asmx', [
                 'headers' => [
                     'Content-Type' => 'text/xml; charset=utf-8',
@@ -97,7 +96,7 @@ class MondialRelayService
                 throw new Exception($errorMessage);
             }
 
-            // 5. Interprétation de la réponse
+            // 5. Response Interpretation
             libxml_use_internal_errors(true);
             $xmlResponse = simplexml_load_string($content);
 
@@ -110,11 +109,11 @@ class MondialRelayService
 
             $soapBody = $xmlResponse->children($namespaces['soap'])->Body;
 
-            // La réponse WSI4 utilise le namespace MR_NAMESPACE
+            // WSI4 response uses the MR_NAMESPACE
             $mrResponse = $soapBody->children(self::MR_NAMESPACE)->WSI4_PointRelais_RechercheResponse;
             $result = $mrResponse->WSI4_PointRelais_RechercheResult ?? null;
 
-            // Vérification de Fault
+            // SOAP Fault Check
             if (!$result) {
                 $fault = $xmlResponse->xpath('//faultstring');
                 $errorMessage = (string) ($fault[0] ?? "Réponse MR inattendue ou structure invalide.");
@@ -122,7 +121,7 @@ class MondialRelayService
                 throw new Exception("Réponse SOAP invalide : " . $errorMessage);
             }
 
-            // Le code STAT est généralement directement sous le WSI4_PointRelais_RechercheResult
+            // STAT code check (STAT = 0 means Success)
             $statCode = (string) ($result->STAT ?? '99');
 
             if ($statCode !== '0') {
@@ -131,7 +130,7 @@ class MondialRelayService
                 throw new Exception($errorMessage);
             }
 
-            // Si STAT = 0, on parse les PointsRelais.
+            // Parse and format results if STAT = 0
             return $this->formatPudosResponse($result->PointsRelais->PointRelais_Details ?? []);
         } catch (\Exception $e) {
             $this->logger->critical("Exception fatale dans MondialRelayService: " . $e->getMessage());
@@ -139,6 +138,9 @@ class MondialRelayService
         }
     }
 
+    /**
+     * Builds the raw SOAP XML request body.
+     */
     private function buildSoapRequest(string $cp, string $pays, string $security, string $nbResultats): string
     {
         $enseigne = self::ENSEIGNE;
@@ -170,9 +172,7 @@ XML;
     }
 
     /**
-     * Formate les horaires XML d'une journée (4 strings) en un tableau lisible.
-     * @param \SimpleXMLElement|null $horairesXml L'objet SimpleXMLElement pour le jour (e.g., $pudo->Horaires_Lundi).
-     * @return array Un tableau avec les clés 'am_start', 'am_end', 'pm_start', 'pm_end'.
+     * Formats daily XML schedule strings into a structured array.
      */
     private function formatDayHours(\SimpleXMLElement $horairesXml = null): array
     {
@@ -187,14 +187,11 @@ XML;
 
         $strings = [];
         foreach ($horairesXml->string as $str) {
-            // Le casting en string gère les cas de balise vide (<string />)
             $strings[] = (string) $str;
         }
 
-        // Assure que nous avons 4 éléments, remplis par des chaînes vides si manquants
         $strings = array_pad($strings, 4, '');
 
-        // Format final : [Ouverture Matin, Fermeture Matin, Ouverture Soir, Fermeture Soir]
         return [
             'am_start' => $strings[0],
             'am_end'   => $strings[1],
@@ -203,6 +200,9 @@ XML;
         ];
     }
 
+    /**
+     * Formats the raw SOAP object into a clean PUDO (Pick-up Drop-off) array.
+     */
     private function formatPudosResponse(object $pointsRelais): array
     {
         $formatted = [];
@@ -210,31 +210,25 @@ XML;
 
         foreach ($pointsRelais as $pudo) {
 
-            // Extraction du Numéro (id)
             $pudoNum = (string) ($pudo->Num ?? '');
 
-            // --- Extraction des Coordonnées (Gestion de la virgule) ---
-
+            // Coordination extraction (Handling French comma vs standard dot)
             $latitudeStr = trim((string) ($pudo->Latitude ?? ''));
             $longitudeStr = trim((string) ($pudo->Longitude ?? ''));
 
-            // Remplacer la virgule par un point pour garantir le casting en float
             $latitudeStr = str_replace(',', '.', $latitudeStr);
             $longitudeStr = str_replace(',', '.', $longitudeStr);
 
             $latitude = !empty($latitudeStr) ? (float) $latitudeStr : null;
             $longitude = !empty($longitudeStr) ? (float) $longitudeStr : null;
 
-            // ---  Extraction du Nom et de l'Adresse (Utiliser LgAdr1 pour le nom) ---
-
-            // LgAdr1 contient le nom du commerce (e.g., "LOCKER ECO LAVERIE...")
+            // Name and Address extraction (Handling MR specific fields LgAdr1/2/3)
             $commerceName = trim((string) ($pudo->LgAdr1 ?? ''));
 
             if (empty($commerceName)) {
                 $commerceName = trim((string) ($pudo->LgAdr2 ?? ''));
             }
 
-            // L'adresse de rue est dans LgAdr3 ou LgAdr2 (selon le format MR)
             $streetAddress = trim((string) ($pudo->LgAdr3 ?? ''));
             if (empty($streetAddress)) {
                 $streetAddress = trim((string) ($pudo->LgAdr2 ?? ''));
@@ -243,7 +237,7 @@ XML;
                 $streetAddress = trim((string) ($pudo->LgAdr1 ?? ''));
             }
 
-            // --- Extraction des Horaires ---
+            // Schedule extraction
             $horaires = [];
             foreach ($daysOfWeek as $day) {
                 $propName = 'Horaires_' . $day;
@@ -260,7 +254,7 @@ XML;
                 'postalCode' => (string) ($pudo->CP ?? ''),
                 'city' => (string) ($pudo->Ville ?? ''),
                 'country' => (string) ($pudo->Pays ?? ''),
-                'hours' => $horaires, 
+                'hours' => $horaires,
             ];
         }
         return $formatted;

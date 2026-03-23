@@ -21,7 +21,6 @@ class UserRepository extends ServiceEntityRepository
         parent::__construct($registry, User::class);
     }
 
-    // Exemple : trouver un utilisateur par email
     public function findOneByEmail(string $email): ?User
     {
         return $this->createQueryBuilder('u')
@@ -31,7 +30,6 @@ class UserRepository extends ServiceEntityRepository
             ->getOneOrNullResult();
     }
 
-    // Exemple : trouver tous les utilisateurs avec un rôle spécifique
     public function findByRole(string $role): array
     {
         return $this->createQueryBuilder('u')
@@ -41,5 +39,4 @@ class UserRepository extends ServiceEntityRepository
             ->getResult();
     }
 
-    // Tu peux ajouter d'autres méthodes personnalisées ici
 }

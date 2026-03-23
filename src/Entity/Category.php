@@ -36,7 +36,7 @@ class Category
         $this->products = new ArrayCollection();
     }
 
-    // Getters & Setters ...
+    // Getters & Setters
 
     // ID
     public function getId(): ?int

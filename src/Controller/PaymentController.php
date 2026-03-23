@@ -10,16 +10,17 @@ use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 #[Route('/api/payments')]
-#[IsGranted('ROLE_ADMIN')]
+#[IsGranted('ROLE_ADMIN')] // Security: Access restricted to administrators for financial auditing
 class PaymentController extends AbstractController
 {
     /**
-     * Liste tous les paiements (Journal financier)
+     * Lists all payment transactions (Financial Audit Log).
+     * Provides a reverse-chronological view of all payment attempts and successes.
      */
     #[Route('', name: 'api_payment_list', methods: ['GET'])]
     public function list(PaymentRepository $repo, Request $request): JsonResponse
     {
-        // On récupère tout, du plus récent au plus ancien
+        // Fetch all transactions, ordered from most recent to oldest
         $payments = $repo->findBy([], ['createdAt' => 'DESC']);
 
         $data = array_map(function ($p) {
@@ -30,7 +31,7 @@ class PaymentController extends AbstractController
                 'amount' => $p->getAmount(),
                 'transactionId' => $p->getTransactionId(),
                 'createdAt' => $p->getCreatedAt()->format('d/m/Y H:i'),
-                // On inclut les infos de la commande pour le lien dans le Dashboard
+                // Include linked order details for dashboard navigation
                 'order' => [
                     'id' => $p->getOrder()?->getId(),
                     'total' => $p->getOrder()?->getTotal(),
@@ -42,7 +43,7 @@ class PaymentController extends AbstractController
     }
 
     /**
-     * Détail d'un paiement spécifique
+     * Retrieve detailed information for a specific payment transaction.
      */
     #[Route('/{id}', name: 'api_payment_get', methods: ['GET'])]
     public function getOne(int $id, PaymentRepository $repo): JsonResponse

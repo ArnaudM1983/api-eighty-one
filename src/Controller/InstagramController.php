@@ -22,10 +22,14 @@ class InstagramController extends AbstractController
         $this->httpClient = $httpClient;
     }
 
+    /**
+     * Fetches the Instagram media feed using the Graph API.
+     * Requires a valid access token stored in the database.
+     */
     #[Route('', name: 'feed', methods: ['GET'])]
     public function feed(): JsonResponse
     {
-        // Get Valid Token
+        // Retrieve a valid (non-expired) token from the repository
         $token = $this->tokenRepository->getValidToken();
 
         if (!$token) {
@@ -35,10 +39,10 @@ class InstagramController extends AbstractController
         }
 
         try {
-            // Appel API Instagram Graph pour récupérer les posts
+            // Request media data from Instagram Graph API
             $response = $this->httpClient->request(
                 'GET',
-                'https://graph.instagram.com/me/media', 
+                'https://graph.instagram.com/me/media',
                 [
                     'query' => [
                         'fields' => 'id,caption,media_url,permalink,media_type,thumbnail_url',
@@ -49,13 +53,14 @@ class InstagramController extends AbstractController
 
             $data = $response->toArray();
 
-            // Filtrer seulement les images ou reels si besoin
+            // Filter results to include only specific media types if necessary
             $posts = array_filter($data['data'], function ($item) {
                 return in_array($item['media_type'], ['IMAGE', 'CAROUSEL_ALBUM', 'VIDEO']);
             });
 
+            // Re-index the array to ensure a clean JSON output
             return $this->json($posts);
-
+            
         } catch (\Exception $e) {
             return $this->json([
                 'error' => 'Failed to fetch Instagram posts.',

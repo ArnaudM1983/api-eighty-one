@@ -133,7 +133,7 @@ class ImportWooCommerceCommand extends Command
         }
         $this->em->flush();
 
-        // Enfants
+        // Childrens
         foreach ($data as $item) {
             if ($item['parent'] !== "0") {
                 $category = new Category();
@@ -154,7 +154,7 @@ class ImportWooCommerceCommand extends Command
         return $categoriesByWooId;
     }
 
-    // -------------------- PRODUCTS --------------------
+    // Products
     private function importProducts(string $postsJson, string $postmetaJson, string $attachmentsJson, OutputInterface $output): array
     {
         $postsData = json_decode(file_get_contents($postsJson), true);
@@ -169,7 +169,7 @@ class ImportWooCommerceCommand extends Command
             $attachmentsById[$att['ID']] = $att['guid'];
         }
 
-        // Produits
+        // Products
         foreach ($postsData as $post) {
             if ($post['post_type'] !== 'product' || $post['post_parent'] !== "0") continue;
 
@@ -186,7 +186,7 @@ class ImportWooCommerceCommand extends Command
         }
         $this->em->flush();
 
-        // Variantes
+        // Variants
         foreach ($postsData as $post) {
             if ($post['post_type'] !== 'product' || $post['post_parent'] === "0") continue;
 

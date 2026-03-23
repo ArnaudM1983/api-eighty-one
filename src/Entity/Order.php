@@ -86,13 +86,17 @@ class Order
         return $this;
     }
 
-    // Calcul du sous-total (total des articles)
+    /**
+     * Calculates the subtotal (sum of all order items)
+     */
     public function getSubTotal(): float
     {
         return (float) array_sum(array_map(fn($item) => $item->getTotalPrice(), $this->items->toArray()));
     }
 
-    // Calcul du prix final (articles + port) - Gardé pour la compatibilité
+    /**
+     * Legacy method for price calculation (items + shipping)
+     */
     public function getTotalPrice(): float
     {
         $itemsTotal = $this->getSubTotal();
@@ -101,24 +105,31 @@ class Order
         return $itemsTotal + $shipping;
     }
 
-    // --- NOUVELLE MÉTHODE : Centralise le calcul pour Stripe/PayPal ---
+    /**
+     * Centralized total calculation for Stripe/PayPal payment intents
+     */
     public function calculateTotal(): float
     {
         return $this->getSubTotal() + (float) $this->getShippingCost();
     }
 
+    /**
+     * Returns the total quantity of items in the order
+     */
     public function getTotal(): ?string
     {
         return $this->total;
     }
 
-    // Stock la valeur totale finale
     public function setTotal(float $total): self
     {
         $this->total = number_format($total, 2, '.', '');
         return $this;
     }
 
+    /**
+     * Returns the total quantity of items in the order
+     */
     public function getTotalQuantity(): int
     {
         return array_sum(array_map(fn($item) => $item->getQuantity(), $this->items->toArray()));
@@ -210,17 +221,25 @@ class Order
         return $this;
     }
 
-    // --- Payment helpers ---
+    /**
+     * Calculates the total amount already paid via successful transactions
+     */
     public function getTotalPaid(): float
     {
         return array_sum(array_map(fn($p) => $p->isPaid() ? $p->getAmount() : 0, $this->payments->toArray()));
     }
 
+    /**
+     * Calculates the remaining balance to be paid
+     */
     public function getRemainingAmount(): float
     {
         return max(0, $this->getTotal() - $this->getTotalPaid());
     }
 
+    /**
+     * Checks if the order is fully settled
+     */
     public function isFullyPaid(): bool
     {
         return $this->getRemainingAmount() <= 0;

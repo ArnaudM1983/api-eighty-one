@@ -15,7 +15,10 @@ class CleanProductImagePathsCommand extends Command
 {
     private const OLD_BASE_URL = 'https://eightyonestore.com/wp-content/uploads/';
     private const NEW_PATH_PREFIX = 'uploads/';
-    // Regex pour cibler l'ancienne URL, y compris l'année et le mois (ex: 2023/11/)
+
+    /**
+     * Regex to target the old WordPress URL structure, including year and month (e.g., 2023/11/)
+     */
     private const CLEANING_REGEX = '#https://eightyonestore\.com/wp-content/uploads/[0-9]{4}/[0-9]{2}/#';
 
     public function __construct(private EntityManagerInterface $em)
@@ -31,7 +34,7 @@ class CleanProductImagePathsCommand extends Command
         $mainImageCount = 0;
         $galleryImageCount = 0;
 
-        // 1. Traitement des images principales (mainImage sur l'entité Product)
+        // 1. Process main product images (mainImage field in Product entity)
         $output->writeln("Nettoyage des images principales...");
         foreach ($products as $product) {
             $mainImage = $product->getMainImage();
@@ -47,7 +50,7 @@ class CleanProductImagePathsCommand extends Command
             }
         }
 
-        // 2. Traitement des images de galerie (url sur l'entité ProductImage)
+        // 2. Process gallery images (url field in ProductImage entity)
         $output->writeln("Nettoyage des images de galerie...");
         foreach ($images as $image) {
             $imageUrl = $image->getUrl();
@@ -63,10 +66,11 @@ class CleanProductImagePathsCommand extends Command
             }
         }
 
+        // Persist all changes to the database
         $this->em->flush();
         
-        $output->writeln("<info>✅ $mainImageCount images principales mises à jour.</info>");
-        $output->writeln("<info>✅ $galleryImageCount images de galerie mises à jour.</info>");
+        $output->writeln("<info>$mainImageCount images principales mises à jour.</info>");
+        $output->writeln("<info>$galleryImageCount images de galerie mises à jour.</info>");
 
         return Command::SUCCESS;
     }

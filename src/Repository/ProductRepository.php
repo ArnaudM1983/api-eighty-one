@@ -22,7 +22,6 @@ class ProductRepository extends ServiceEntityRepository
         parent::__construct($registry, Product::class);
     }
 
-    // Exemple : trouver les produits par prix inférieur à une valeur
     public function findByPriceUnder(float $price): array
     {
         return $this->createQueryBuilder('p')
@@ -33,22 +32,18 @@ class ProductRepository extends ServiceEntityRepository
             ->getResult();
     }
 
-    // Exemple : récupérer tous les produits d'une catégorie donnée
     public function findByCategory(Category $category): array
     {
         return $this->createQueryBuilder('p')
             ->join('p.categories', 'c')
             ->andWhere('c = :category')
             ->setParameter('category', $category)
-            // 1. On trie par la position définie dans le Back-Office (0, 1, 2...)
             ->orderBy('p.position', 'ASC')
-            // 2. Si les positions sont identiques (ex: tout le monde à 0), on prend les plus récents
             ->addOrderBy('p.id', 'DESC') 
             ->getQuery()
             ->getResult();
     }
 
-    // Exemple : rechercher un produit par slug
     public function findOneBySlug(string $slug): ?Product
     {
         return $this->createQueryBuilder('p')

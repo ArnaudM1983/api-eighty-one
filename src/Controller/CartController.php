@@ -25,8 +25,7 @@ class CartController extends AbstractController
     ) {}
 
     /**
-     * Retrieve cart from cookie token
-     * Private helper method
+     * Retrieve cart using the token stored in the cookie
      */
     private function getCartFromCookie(Request $request): ?Cart
     {
@@ -35,8 +34,7 @@ class CartController extends AbstractController
     }
 
     /**
-     * Create a cart if user has no token
-     * Private helper method
+     * Create a new cart and generate a secure unique token
      */
     private function createCart(): Cart
     {
@@ -48,27 +46,26 @@ class CartController extends AbstractController
     }
 
     /**
-* Attach cart cookie to a JsonResponse
-* Private helper method
-*/
-private function setCookieResponse(JsonResponse $response, Cart $cart)
-{
-$response->headers->setCookie(
-new Cookie(
-'cart_token',          // Nom
-$cart->getToken(),      // Valeur
-strtotime('+30 days'),  // Expiration
-'/',                    // Chemin
-null,                   // Domaine
-true,                   // SECURE : Doit être à TRUE (HTTPS OVH)
-true,                   // HTTPONLY : true
-false,                  // RAW : false
-'none'                  // SAMESITE : DOIT ÊTRE À 'none'
-)
-);
+     * Attach a secure cart cookie to the JsonResponse
+     */
+    private function setCookieResponse(JsonResponse $response, Cart $cart)
+    {
+        $response->headers->setCookie(
+            new Cookie(
+                'cart_token',           // Name
+                $cart->getToken(),      // Value
+                strtotime('+30 days'),  // Expiration
+                '/',                    // Path
+                null,                   // Domain
+                true,                   // SECURE: true (HTTPS only)
+                true,                   // HTTPONLY: true
+                false,                  // RAW: false
+                'none'                  // SAMESITE: none
+            )
+        );
 
-    return $response;
-}
+        return $response;
+    }
 
 
     /**
@@ -102,7 +99,7 @@ false,                  // RAW : false
             ]);
         }
 
-        // Vérification du stock réel
+        // Real-time stock verification
         $availableStock = $variant ? $variant->getStock() : $product->getStock();
         if ($requestedQty > $availableStock) {
             return $this->json([
@@ -114,7 +111,7 @@ false,                  // RAW : false
         $price = $variant ? $variant->getPrice() : $product->getPrice();
         $unitWeight = $variant ? $variant->getWeight() : $product->getWeight();
 
-        // Vérifie si l’item existe déjà dans le panier
+        // Check if item already exists in the cart
         $existing = null;
         foreach ($cart->getItems() as $item) {
             if (
@@ -169,7 +166,7 @@ false,                  // RAW : false
     #[Route('', name: 'cart_get', methods: ['GET'])]
     public function get(Request $request): JsonResponse
     {
-        // Récupère le token depuis query param ou cookie
+        // Retrieve token from query params or cookies
         $token = $request->query->get('cartToken') ?? $request->cookies->get('cart_token');
 
         if (!$token) {
@@ -248,7 +245,7 @@ false,                  // RAW : false
             return $this->json(['error' => 'Quantité invalide'], 400);
         }
 
-        // Vérification du stock réel
+        // Real-time stock verification
         $availableStock = $item->getVariant() ? $item->getVariant()->getStock() : $item->getProduct()->getStock();
         if ($requestedQty > $availableStock) {
             return $this->json([
@@ -257,7 +254,7 @@ false,                  // RAW : false
             ], 400);
         }
 
-        // Mise à jour de la quantité
+        // Update quantity
         $item->setQuantity($requestedQty);
         $this->em->flush();
 
@@ -284,15 +281,14 @@ false,                  // RAW : false
         $cart = $this->getCartFromCookie($request);
 
         if ($cart) {
-            // Suppression des item
+            // Remove all items attached to the cart
             foreach ($cart->getItems() as $item) {
                 $this->em->remove($item);
             }
 
-            // Flush pour libérer les clés étrangères
             $this->em->flush();
 
-            // Suppression du panier
+            // Remove the cart entity itself
             $this->em->remove($cart);
             $this->em->flush();
         }

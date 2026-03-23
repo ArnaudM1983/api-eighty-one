@@ -21,7 +21,6 @@ class ProductImageRepository extends ServiceEntityRepository
         parent::__construct($registry, ProductImage::class);
     }
 
-    // Exemple de méthode personnalisée : trouver les images d'un produit
     public function findByProductId(int $productId): array
     {
         return $this->createQueryBuilder('pi')
@@ -32,5 +31,4 @@ class ProductImageRepository extends ServiceEntityRepository
             ->getResult();
     }
 
-    // Tu peux ajouter d'autres méthodes personnalisées ici
 }

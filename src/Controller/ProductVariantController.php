@@ -55,6 +55,7 @@ class ProductVariantController extends AbstractController
      * CRUD: Create
      * HTTP Method: POST
      * URL: /api/variants
+     * Description : Handles the creation of a variant with property inheritance from the parent product.
      **/
     #[Route('', methods: ['POST'])]
     #[IsGranted('ROLE_ADMIN')]
@@ -66,15 +67,15 @@ class ProductVariantController extends AbstractController
         $variant->setName($data['name'] ?? '');
         $variant->setSku($data['sku'] ?? null);
         
-        // Stock, Image et Attributs (Pas d'héritage nécessaire)
+        // Stock, Image, and Attributes (No inheritance required for these)
         $variant->setStock(isset($data['stock']) ? (int)$data['stock'] : 0);
         $variant->setImage($data['image'] ?? null);
         
-        // Gestion propre des attributs (NULL si vide pour éviter [])
+        // Clean attribute handling (set to NULL if empty to avoid empty JSON arrays)
         $attributes = $data['attributes'] ?? null;
         $variant->setAttributes(!empty($attributes) ? $attributes : null);
 
-        // RÉCUPÉRATION ET HÉRITAGE DU PARENT
+        // PARENT PRODUCT ASSOCIATION & DATA INHERITANCE
         $pId = $data['product'] ?? $data['product_id'] ?? null;
 
         if ($pId) {
@@ -86,18 +87,16 @@ class ProductVariantController extends AbstractController
             
             $variant->setProduct($product);
 
-            // --- 1. LOGIQUE PRIX (HÉRITAGE) ---
-            // Si le front envoie un prix, on l'utilise. Sinon, on prend celui du parent.
+            // --- 1. PRICE INHERITANCE LOGIC ---
+            // Use provided price or fallback to parent product price
             if (!empty($data['price'])) {
                 $variant->setPrice($data['price']);
             } else {
                 $variant->setPrice($product->getPrice());
             }
 
-            // --- 2. LOGIQUE POIDS (HÉRITAGE) ---
-            // Si le front envoie un poids non nul, on l'utilise. Sinon, on prend celui du parent.
-            // On utilise !empty pour éviter que "0" ou "" ne bloque l'héritage si nécessaire, 
-            // mais attention si le poids 0 est une valeur valide, il vaudrait mieux utiliser is_numeric check.
+            // --- 2. WEIGHT INHERITANCE LOGIC ---
+            // Use provided weight or fallback to parent product weight
             if (isset($data['weight']) && $data['weight'] !== '' && $data['weight'] !== null) {
                 $variant->setWeight((float)$data['weight']);
             } else {
@@ -118,7 +117,7 @@ class ProductVariantController extends AbstractController
      * CRUD: Update
      * HTTP Method: PUT
      * URL: /api/variants/{id}
-     * Description: Update an variant.
+     * Description: Update a variant.
      **/
     #[Route('/{id}', methods: ['PUT', 'PATCH'])]
     #[IsGranted('ROLE_ADMIN')]
@@ -159,6 +158,9 @@ class ProductVariantController extends AbstractController
         return $this->json(['message' => 'Variant deleted']);
     }
 
+    /**
+     * Helper method to format variant data for JSON responses.
+     */
     private function serializeVariant(ProductVariant $v): array
     {
         $formatImagePath = fn(?string $path) => $path ? '/' . ltrim($path, '/') : null;

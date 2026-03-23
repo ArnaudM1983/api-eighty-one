@@ -12,7 +12,7 @@ use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 #[Route('/api/admin/users')]
-#[IsGranted('ROLE_ADMIN')] // Sécurité : Seuls les admins peuvent accéder à ces routes
+#[IsGranted('ROLE_ADMIN')] // Security: Only administrators can access these routes
 class AdminUserController extends AbstractController
 {
     public function __construct(
@@ -21,7 +21,7 @@ class AdminUserController extends AbstractController
     ) {}
 
     /**
-     * LISTE DES UTILISATEURS (ADMINS ET CLIENTS)
+     * LIST ALL USERS (ADMINS AND CUSTOMERS)
      */
     #[Route('', methods: ['GET'])]
     public function list(): JsonResponse
@@ -36,7 +36,6 @@ class AdminUserController extends AbstractController
                 'firstName' => $user->getFirstName(),
                 'lastName' => $user->getLastName(),
                 'roles' => $user->getRoles(),
-                // JAMAIS de mot de passe ici
             ];
         }, $users);
 
@@ -45,7 +44,7 @@ class AdminUserController extends AbstractController
     }
 
     /**
-     * CRÉER UN NOUVEL UTILISATEUR (ADMIN OU STAFF)
+     * CREATE A NEW USER (ADMIN OR STAFF)
      */
     #[Route('', methods: ['POST'])]
     public function create(Request $request): JsonResponse
@@ -56,23 +55,23 @@ class AdminUserController extends AbstractController
             return $this->json(['error' => 'Email et mot de passe sont obligatoires'], 400);
         }
 
-        // Vérifier si l'email existe déjà
+        // Check if email already exists
         $existingUser = $this->em->getRepository(User::class)->findOneBy(['email' => $data['email']]);
         if ($existingUser) {
             return $this->json(['error' => 'Cet email est déjà utilisé'], 400);
         }
 
-        // Création
+        // Initialize new User entity
         $user = new User();
         $user->setEmail($data['email']);
         $user->setFirstName($data['firstName'] ?? null);
         $user->setLastName($data['lastName'] ?? null);
         
-        // Définir le rôle (par défaut ROLE_ADMIN si créé depuis cette interface, ou au choix)
+        // Set user roles (default to ROLE_ADMIN if not provided)
         $roles = $data['roles'] ?? ['ROLE_ADMIN'];
         $user->setRoles($roles);
 
-        // HACHAGE DU MOT DE PASSE (CRUCIAL)
+        // PASSWORD HASHING (CRITICAL)
         $hashedPassword = $this->passwordHasher->hashPassword($user, $data['password']);
         $user->setPassword($hashedPassword);
 
@@ -87,7 +86,7 @@ class AdminUserController extends AbstractController
     }
 
     /**
-     * MODIFIER UN UTILISATEUR (Email, Nom, Prénom)
+     * UPDATE USER DETAILS (Email, Name, Roles)
      */
     #[Route('/{id}', methods: ['PUT', 'PATCH'])]
     public function update(User $user, Request $request): JsonResponse
@@ -99,7 +98,7 @@ class AdminUserController extends AbstractController
         if (isset($data['lastName'])) $user->setLastName($data['lastName']);
         if (isset($data['roles'])) $user->setRoles($data['roles']);
 
-        // GESTION DU CHANGEMENT DE MOT DE PASSE
+        // Handle password update if provided
         if (!empty($data['password'])) {
             $hashedPassword = $this->passwordHasher->hashPassword($user, $data['password']);
             $user->setPassword($hashedPassword);
@@ -115,12 +114,12 @@ class AdminUserController extends AbstractController
     }
 
     /**
-     * SUPPRIMER UN UTILISATEUR
+     * DELETE A USER
      */
     #[Route('/{id}', methods: ['DELETE'])]
     public function delete(User $user): JsonResponse
     {
-        // Sécurité : On empêche l'admin de se supprimer lui-même
+        // Security check: Prevent administrators from deleting their own account
         if ($user === $this->getUser()) {
             return $this->json(['error' => 'Vous ne pouvez pas supprimer votre propre compte'], 403);
         }
@@ -132,7 +131,7 @@ class AdminUserController extends AbstractController
     }
 
     /**
-     * VOIR UN UTILISATEUR
+     * FETCH A SINGLE USER
      */
     #[Route('/{id}', methods: ['GET'])]
     public function show(User $user): JsonResponse

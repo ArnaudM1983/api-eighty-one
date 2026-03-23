@@ -36,9 +36,6 @@ class PaymentRepository extends ServiceEntityRepository
         }
     }
 
-    /**
-     * Retourne tous les paiements réussis pour une commande donnée
-     */
     public function findSuccessfulPaymentsByOrderId(int $orderId): array
     {
         return $this->createQueryBuilder('p')
@@ -51,9 +48,6 @@ class PaymentRepository extends ServiceEntityRepository
             ->getResult();
     }
 
-    /**
-     * Retourne le montant total payé pour une commande
-     */
     public function getTotalPaidByOrderId(int $orderId): float
     {
         $result = $this->createQueryBuilder('p')
@@ -68,9 +62,6 @@ class PaymentRepository extends ServiceEntityRepository
         return (float)$result;
     }
 
-    /**
-     * Retourne les paiements en attente pour une commande
-     */
     public function findPendingByOrderId(int $orderId): array
     {
         return $this->createQueryBuilder('p')

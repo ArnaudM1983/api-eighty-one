@@ -23,7 +23,8 @@ class ProductImage
     #[ORM\JoinColumn(nullable: false)]
     private ?Product $product = null;
 
-    // Getters & Setters ...
+    // Getters & Setters
+    
     // ID
     public function getId(): ?int
     {

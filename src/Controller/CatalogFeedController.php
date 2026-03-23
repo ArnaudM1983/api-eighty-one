@@ -11,21 +11,24 @@ use Symfony\Component\HttpFoundation\Request;
 #[Route('/api/catalog')]
 class CatalogFeedController extends AbstractController
 {
+    /**
+     * Generates an XML product feed for Google Merchant Center and Facebook/Instagram Shopping.
+     */
     #[Route('/feed.xml', name: 'api_catalog_feed', methods: ['GET'])]
     public function feed(ProductRepository $productRepository, Request $request): Response
     {
-        // Récupérer les produits
+        // Fetch all products from the database
         $products = $productRepository->findAll();
 
-        // CONFIGURATION DES URL
+        // --- URL CONFIGURATION ---
         
-        // URL du FRONT (Next.js) -> C'est là que le client sera redirigé
+        // Frontend URL (Next.js) -> Where the user is redirected from the ad
         $frontendBaseUrl = $this->getParameter('app.frontend_url');
 
-        // URL du BACK (Symfony) -> Pour que Facebook puisse télécharger l'image
+        // Backend URL (Symfony) -> Where the platform downloads the product images
         $backendBaseUrl = $request->getSchemeAndHttpHost(); 
 
-        // Construction du XML (Format Google Merchant / Facebook)
+        // Building the RSS/XML structure (Google Merchant / Facebook standard)
         $xmlContent = '<?xml version="1.0"?>';
         $xmlContent .= '<rss xmlns:g="http://base.google.com/ns/1.0" version="2.0">';
         $xmlContent .= '<channel>';
@@ -34,7 +37,7 @@ class CatalogFeedController extends AbstractController
         $xmlContent .= '<description>Flux produits pour Instagram Shopping</description>';
 
         foreach ($products as $product) {
-            // Sécurité : on ignore les produits sans prix ou sans image
+            // Safety check: Skip products without a price or a main image
             if (!$product->getPrice() || !$product->getMainImage()) {
                 continue;
             }
@@ -44,26 +47,26 @@ class CatalogFeedController extends AbstractController
             $xmlContent .= '<g:id>' . $product->getId() . '</g:id>';
             $xmlContent .= '<g:title><![CDATA[' . $product->getName() . ']]></g:title>';
             
-            // --- CORRECTION 1 : GESTION DE LA DESCRIPTION VIDE ---
-            // Si la description est vide, on utilise le Nom du produit
+            // --- DESCRIPTION HANDLING ---
+            // If description is empty, fallback to product name
             $rawDesc = $product->getDescription();
             if (empty($rawDesc)) {
                 $rawDesc = $product->getName() . ' - Disponible sur 81Store.';
             }
+            // Strip HTML tags and limit length for XML compatibility
             $desc = strip_tags($rawDesc);
             $xmlContent .= '<g:description><![CDATA[' . substr($desc, 0, 5000) . ']]></g:description>';
             
             $xmlContent .= '<g:link>' . $frontendBaseUrl . '/produit/' . $product->getSlug() . '</g:link>';
             
-            // --- CORRECTION 2 : GESTION DU CHEMIN D'IMAGE ---
-            // On nettoie le chemin venant de la BDD pour éviter le double "uploads"
-            $imagePathInDb = $product->getMainImage(); // ex: "uploads/image.png" ou "image.png"
+            // --- IMAGE PATH LOGIC ---
+            // Standardize the image path coming from the database
+            $imagePathInDb = $product->getMainImage(); 
             
-            // Si le chemin en BDD commence déjà par "uploads/", on ne l'ajoute pas
+            // Check if the path already contains the "uploads/" prefix to avoid duplication
             if (str_starts_with($imagePathInDb, 'uploads/')) {
                 $imageUrl = $backendBaseUrl . '/' . $imagePathInDb;
             } else {
-                // Sinon on l'ajoute
                 $imageUrl = $backendBaseUrl . '/uploads/' . $imagePathInDb;
             }
             

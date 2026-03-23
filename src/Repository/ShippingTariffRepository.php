@@ -22,32 +22,32 @@ class ShippingTariffRepository extends ServiceEntityRepository
     }
 
     /**
-     * Trouve le tarif le plus adapté pour une expédition.
-     * * Recherche le palier de poids le plus petit qui est supérieur ou égal
-     * au poids total du colis, pour le mode et pays spécifiés.
+     * Finds the most suitable shipping tariff for a specific package.
+     * * Logic: Searches for the smallest weight tier that is greater than or equal 
+     * to the total package weight, filtered by country and shipping mode.
      *
-     * @param string $countryCode Code ISO du pays (ex: 'FR')
-     * @param string $modeCode Code du mode de livraison (ex: 'pr' ou 'locker')
-     * @param int $weightInGrams Poids total du colis en grammes
-     * @return ShippingTariff|null L'entité tarifaire trouvée (contient priceHt)
+     * @param string $countryCode ISO country code (e.g., 'FR')
+     * @param string $modeCode Shipping mode code (e.g., 'pr', 'locker', 'home')
+     * @param int $weightInGrams Total weight of the package in grams
+     * @return ShippingTariff|null The matching tariff entity containing the price
      */
     public function findTariff(string $countryCode, string $modeCode, int $weightInGrams): ?ShippingTariff
     {
         return $this->createQueryBuilder('t')
-            // Filtrer par le pays et le mode de livraison exacts
+            // Filter by exact country and shipping method
             ->andWhere('t.countryCode = :country')
             ->setParameter('country', $countryCode)
             ->andWhere('t.modeCode = :mode')
             ->setParameter('mode', $modeCode)
             
-            // Filtrer les paliers de poids qui sont supérieurs ou égaux au poids du colis
+            // Filter tiers that can accommodate the package weight
             ->andWhere('t.weightMaxG >= :weight')
             ->setParameter('weight', $weightInGrams)
 
-            // Trier par poids maximum pour trouver le palier le plus proche (le plus petit)
+            // Order by maximum weight ascending to find the closest (cheapest) tier
             ->orderBy('t.weightMaxG', 'ASC')
             
-            // Limiter à 1 pour récupérer le premier résultat (le tarif le plus petit et suffisant)
+            // Limit to 1 to retrieve the single best matching result
             ->setMaxResults(1)
             ->getQuery()
             ->getOneOrNullResult()

@@ -12,9 +12,13 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfony\Component\HttpFoundation\File\Exception\FileException;
 
 #[Route('/api/media')]
-#[IsGranted('ROLE_ADMIN')] // Ajout de la sécurité pour restreindre l'accès aux administrateurs
+#[IsGranted('ROLE_ADMIN')] // Security: Restricted to users with administrative privileges
 class MediaController extends AbstractController
 {
+    /**
+     * Handles file uploads, performs security validations, and stores files locally.
+     * Returns the relative path of the uploaded file.
+     */
     #[Route('/upload', methods: ['POST'])]
     public function upload(Request $request, SluggerInterface $slugger): JsonResponse
     {
@@ -25,31 +29,34 @@ class MediaController extends AbstractController
             return $this->json(['error' => 'No file uploaded'], 400);
         }
 
-        // Validation du type de fichier (MIME type)
+        // --- SECURITY VALIDATION: MIME TYPE ---
         $allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
         if (!in_array($file->getMimeType(), $allowedMimeTypes)) {
             return $this->json(['error' => 'Type de fichier non autorisé. Seules les images (JPEG, PNG, GIF, WEBP) sont acceptées.'], 400);
         }
 
-        // Validation de la taille du fichier (par exemple, max 5MB)
+        // --- SECURITY VALIDATION: FILE SIZE (Max 5MB) ---
         $maxFileSize = 5 * 1024 * 1024; // 5 MB
         if ($file->getSize() > $maxFileSize) {
             return $this->json(['error' => 'Fichier trop volumineux. La taille maximale autorisée est de 5MB.'], 400);
         }
 
+        // --- FILENAME SANITIZATION ---
         $originalFilename = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
         $safeFilename = $slugger->slug($originalFilename);
         $newFilename = $safeFilename.'-'.uniqid().'.'.$file->guessExtension();
 
         try {
+            // Move the file to the target directory (public/uploads)
             $file->move(
                 $this->getParameter('kernel.project_dir').'/public/uploads',
                 $newFilename
             );
-        } catch (FileException $e) { // Utiliser une exception plus spécifique
+        } catch (FileException $e) { 
             return $this->json(['error' => 'Failed to save file: ' . $e->getMessage()], 500);
         }
 
+        // Return the relative URL for front-end usage
         return $this->json([
             'url' => 'uploads/' . $newFilename
         ]);

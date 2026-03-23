@@ -14,7 +14,7 @@ use Symfony\Component\Validator\Validator\ValidatorInterface;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 #[Route('/api/shipping_tariffs')]
-#[IsGranted('ROLE_ADMIN')]
+#[IsGranted('ROLE_ADMIN')] // Security: Access restricted to administrators for managing price grids
 class ShippingTariffController extends AbstractController
 {
     public function __construct(
@@ -25,7 +25,8 @@ class ShippingTariffController extends AbstractController
     ) {}
 
     /**
-     * Liste tous les tarifs de la grille.
+     * Lists all shipping tariffs in the price grid.
+     * Ordered by country, shipping mode, and weight for clarity.
      */
     #[Route('', name: 'api_shipping_tariff_index', methods: ['GET'])]
     public function index(): JsonResponse
@@ -36,12 +37,13 @@ class ShippingTariffController extends AbstractController
             'weightMaxG' => 'ASC'
         ]);
 
-        // Suppression du contexte 'groups'. Symfony va normaliser tous les champs publics/getters par défaut.
+        // Default normalization (serializes all public getters/properties)
         return $this->json($tariffs);
     }
 
     /**
-     * Crée un nouveau palier tarifaire.
+     * Creates a new shipping tariff entry.
+     * Uses Symfony Serializer to map JSON to Entity and Validator for data integrity.
      */
     #[Route('', name: 'api_shipping_tariff_new', methods: ['POST'])]
     public function new(Request $request): JsonResponse
@@ -56,6 +58,7 @@ class ShippingTariffController extends AbstractController
             return $this->json(['error' => 'Données JSON invalides.'], 400);
         }
 
+        // Data Validation (Checks for @Assert constraints in the entity)
         $errors = $this->validator->validate($tariff);
         if (count($errors) > 0) {
             $errorMessages = [];
@@ -72,7 +75,8 @@ class ShippingTariffController extends AbstractController
     }
 
     /**
-     * Met à jour un palier tarifaire existant.
+     * Updates an existing shipping tariff entry.
+     * Uses 'object_to_populate' to merge request data into the existing entity instance.
      */
     #[Route('/{id}', name: 'api_shipping_tariff_edit', methods: ['PUT'])]
     public function edit(Request $request, ShippingTariff $tariff): JsonResponse
@@ -84,13 +88,13 @@ class ShippingTariffController extends AbstractController
                 'json', 
                 [
                     'object_to_populate' => $tariff,
-                    // Suppression du contexte 'groups' ici aussi
                 ]
             );
         } catch (\Exception $e) {
             return $this->json(['error' => 'Données JSON invalides.'], 400);
         }
         
+        // Ensure the updated entity still respects constraints
         $errors = $this->validator->validate($tariff);
         if (count($errors) > 0) {
             $errorMessages = [];
@@ -106,7 +110,7 @@ class ShippingTariffController extends AbstractController
     }
 
     /**
-     * Supprime un palier tarifaire.
+     * Deletes a shipping tariff entry.
      */
     #[Route('/{id}', name: 'api_shipping_tariff_delete', methods: ['DELETE'])]
     public function delete(ShippingTariff $tariff): JsonResponse

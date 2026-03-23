@@ -37,7 +37,6 @@ class ProductVariantRepository extends ServiceEntityRepository
         }
     }
 
-    // Exemple de méthode personnalisée : trouver toutes les variantes d'un produit
     public function findByProductId(int $productId): array
     {
         return $this->createQueryBuilder('v')
@@ -48,7 +47,6 @@ class ProductVariantRepository extends ServiceEntityRepository
             ->getResult();
     }
 
-    // Exemple : trouver une variante par SKU
     public function findOneBySku(string $sku): ?ProductVariant
     {
         return $this->findOneBy(['sku' => $sku]);

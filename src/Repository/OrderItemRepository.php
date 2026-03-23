@@ -23,7 +23,6 @@ class OrderItemRepository extends ServiceEntityRepository
         parent::__construct($registry, OrderItem::class);
     }
 
-    // Exemple : récupérer tous les items d'une commande
     public function findByOrder(Order $order): array
     {
         return $this->createQueryBuilder('oi')
@@ -34,7 +33,6 @@ class OrderItemRepository extends ServiceEntityRepository
             ->getResult();
     }
 
-    // Exemple : récupérer tous les items pour un produit donné
     public function findByProduct(Product $product): array
     {
         return $this->createQueryBuilder('oi')
@@ -45,5 +43,4 @@ class OrderItemRepository extends ServiceEntityRepository
             ->getResult();
     }
 
-    // Tu peux ajouter d'autres méthodes personnalisées ici
 }

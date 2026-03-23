@@ -10,7 +10,8 @@ class StockService
     public function __construct(private EntityManagerInterface $em) {}
 
     /**
-     * Décrémente le stock pour une commande validée
+     * Decrements the stock levels for a validated order.
+     * Handles both standalone products and specific product variants.
      */
     public function decrementStock(Order $order): void
     {
@@ -20,14 +21,13 @@ class StockService
             $qty = $item->getQuantity();
 
             if ($variant) {
-                // Si c'est une variante (ex: Taille M), on décrémente la variante
+                // If a variant exists (e.g., Size M), decrement the variant's stock
                 $newStock = $variant->getStock() - $qty;
-                $variant->setStock(max(0, $newStock)); // On évite le négatif
+                // Use max(0, ...) to prevent negative stock values
+                $variant->setStock(max(0, $newStock)); 
                 
-                // Optionnel : Si tu gères aussi un stock global sur le parent
-                // $product->setStock($product->getStock() - $qty);
             } else {
-                // Produit simple sans variante
+                // Standalone product without variants
                 $newStock = $product->getStock() - $qty;
                 $product->setStock(max(0, $newStock));
             }
@@ -36,7 +36,8 @@ class StockService
     }
 
     /**
-     * Ré-incrémente le stock (Annulation de commande)
+     * Increments the stock levels back (Order Cancellation).
+     * Restores stock for products and variants when an order is cancelled.
      */
     public function incrementStock(Order $order): void
     {
