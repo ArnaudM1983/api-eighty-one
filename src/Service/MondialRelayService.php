@@ -19,16 +19,16 @@ use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 
 class MondialRelayService
 {
-    // --- AUTHENTICATION & ACTION CONSTANTS ---
-    private const ENSEIGNE = 'CC22ZCS1';
-    private const CLE_PRIVEE = 'iva9oG9F';
-    private const ACTION_CODE = '24R';
+    // --- CONSTANTS ---
     private const MR_NAMESPACE = 'http://www.mondialrelay.fr/webservice/';
 
     public function __construct(
         private HttpClientInterface $httpClient,
         private ParameterBagInterface $parameterBag,
-        private LoggerInterface $logger
+        private LoggerInterface $logger,
+        private string $mrEnseigne,    // Injecté via services.yaml
+        private string $mrPrivateKey,  // Injecté via services.yaml
+        private string $mrActionCode   // Injecté via services.yaml
     ) {}
 
     /**
@@ -45,14 +45,14 @@ class MondialRelayService
         $poidsHashValue = (string) round($weightInKg * 1000); // 1.0 kg -> '1000'
         $typeActivite = '';
 
-        $action = self::ACTION_CODE;
+        $action = $this->mrActionCode;
         $delaiEnvoi = '0';
         $rayonRecherche = '50';
         $nombreResultats = '30';
 
         // --- SECURITY: CREDENTIALS SANITIZATION ---
-        $enseigne = trim(self::ENSEIGNE);
-        $clePrivee = trim(self::CLE_PRIVEE);
+        $enseigne = trim($this->mrEnseigne);
+        $clePrivee = trim($this->mrPrivateKey);
         // ------------------------------------
 
         // 1. Construct the MD5 Hash String (STRICT MR WSI4 ORDER)
@@ -143,8 +143,8 @@ class MondialRelayService
      */
     private function buildSoapRequest(string $cp, string $pays, string $security, string $nbResultats): string
     {
-        $enseigne = self::ENSEIGNE;
-        $actionCode = self::ACTION_CODE;
+        $enseigne = $this->mrEnseigne;
+        $actionCode = $this->mrActionCode;
         $mrNamespace = self::MR_NAMESPACE;
 
         return <<<XML
