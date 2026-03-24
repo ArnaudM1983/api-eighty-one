@@ -3,135 +3,218 @@
 namespace App\Controller;
 
 use App\Entity\OrderItem;
-use App\Entity\Payment;
+use App\Entity\Order;
 use App\Repository\OrderRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 #[Route('/api/dashboard')]
-#[IsGranted('ROLE_ADMIN')] // Security: Restricted to users with administrative privileges
+#[IsGranted('ROLE_ADMIN')]
 class DashboardController extends AbstractController
 {
-    /**
-     * Aggregates and returns business statistics for the admin dashboard.
-     * Includes revenue calculations (gross/net), sales trends, and top-selling products.
-     */
     #[Route('/stats', name: 'api_dashboard_stats', methods: ['GET'])]
     public function getStats(
+        Request $request,
         OrderRepository $orderRepo,
         EntityManagerInterface $em
     ): JsonResponse {
         try {
+            $period = $request->query->get('period', 'month');
             $now = new \DateTime();
-            $startOfCurrentMonth = new \DateTime('first day of this month 00:00:00');
-            $startOfLastMonth = new \DateTime('first day of last month 00:00:00');
-            $endOfLastMonth = new \DateTime('last day of last month 23:59:59');
+            $today = new \DateTime('today 00:00:00');
 
-            // --- 1. GLOBAL FIGURES (Including Shipping) ---
-            $currentGlobalRevenue = (float)($orderRepo->getRevenueSince($startOfCurrentMonth) ?? 0.0);
-            $currentOrderCount = (int)($orderRepo->countSince($startOfCurrentMonth) ?? 0);
-            
-            // --- 2. SHIPPING REVENUE CALCULATION (Current Month) ---
-            // Sum of shipping costs for validated orders (paid, shipped, completed)
-            $currentShippingRevenue = (float)$orderRepo->createQueryBuilder('o')
-                ->select('SUM(o.shippingCost)')
-                ->where('o.createdAt >= :startDate')
-                ->andWhere('o.status IN (:statuses)')
-                ->setParameter('startDate', $startOfCurrentMonth)
-                ->setParameter('statuses', ['paid', 'shipped', 'completed'])
-                ->getQuery()
-                ->getSingleScalarResult() ?? 0.0;
+            // --- 1. PERIOD LOGIC (Current vs Previous) ---
+            switch ($period) {
+                case 'today':
+                    $startDate = clone $today;
+                    $endDate = new \DateTime('today 23:59:59');
+                    // Compare to: Yesterday same time (or full day)
+                    $prevStart = (clone $startDate)->modify('-1 day');
+                    $prevEnd = (clone $endDate)->modify('-1 day');
+                    
+                    $periodLabel = "Aujourd'hui";
+                    $intervalSpec = 'PT1H'; 
+                    $chartKeyFormat = 'Y-m-d H';
+                    $chartDisplayFormat = 'H\h';
+                    break;
 
-            // --- 3. PRODUCT REVENUE (Excluding Shipping) ---
-            // Gross Revenue (TTC) excluding delivery costs
-            $productRevenueTTC = $currentGlobalRevenue - $currentShippingRevenue;
-            
-            // Net Revenue (HT) - Assuming a 20% VAT rate
+                case '7days':
+                    $startDate = (new \DateTime())->modify('-6 days')->setTime(0, 0, 0);
+                    $endDate = new \DateTime('now');
+                    // Compare to: The 7 days before
+                    $prevStart = (clone $startDate)->modify('-7 days');
+                    $prevEnd = (clone $startDate)->modify('-1 second');
+
+                    $periodLabel = "7 derniers jours";
+                    $intervalSpec = 'P1D'; 
+                    $chartKeyFormat = 'Y-m-d';
+                    $chartDisplayFormat = 'd/m';
+                    break;
+
+                case 'last_month':
+                    $startDate = new \DateTime('first day of last month 00:00:00');
+                    $endDate = new \DateTime('last day of last month 23:59:59');
+                    // Compare to: Month before last month
+                    $prevStart = (clone $startDate)->modify('-1 month');
+                    $prevEnd = (clone $startDate)->modify('-1 second');
+
+                    $periodLabel = "Mois dernier";
+                    $intervalSpec = 'P1D';
+                    $chartKeyFormat = 'Y-m-d';
+                    $chartDisplayFormat = 'd/m';
+                    break;
+
+                case 'year':
+                    $startDate = new \DateTime('first day of January this year 00:00:00');
+                    $endDate = new \DateTime('now');
+                    // Compare to: Last year same period (Year-to-date)
+                    $prevStart = (clone $startDate)->modify('-1 year');
+                    $prevEnd = (clone $endDate)->modify('-1 year');
+
+                    $periodLabel = "Cette année";
+                    $intervalSpec = 'P1M';
+                    $chartKeyFormat = 'Y-m';
+                    $chartDisplayFormat = 'M';
+                    break;
+
+                case 'month':
+                default:
+                    $startDate = new \DateTime('first day of this month 00:00:00');
+                    $endDate = new \DateTime('now');
+                    // Compare to: Last month same period (Month-to-date)
+                    $prevStart = (clone $startDate)->modify('-1 month');
+                    $prevEnd = (clone $endDate)->modify('-1 month');
+
+                    $periodLabel = "Ce mois-ci";
+                    $intervalSpec = 'P1D';
+                    $chartKeyFormat = 'Y-m-d';
+                    $chartDisplayFormat = 'd/m';
+                    break;
+            }
+
+            // --- 2. FETCH DATA ---
+            $statuses = ['paid', 'shipped', 'completed'];
+
+            // Query helper for Global Stats
+            $getStatsForRange = function($start, $end) use ($orderRepo, $statuses) {
+                return $orderRepo->createQueryBuilder('o')
+                    ->select('SUM(o.total) as totalRev, COUNT(o.id) as totalCount, SUM(o.shippingCost) as totalShip')
+                    ->where('o.createdAt BETWEEN :start AND :end')
+                    ->andWhere('o.status IN (:statuses)')
+                    ->setParameter('start', $start)
+                    ->setParameter('end', $end)
+                    ->setParameter('statuses', $statuses)
+                    ->getQuery()->getSingleResult();
+            };
+
+            $currentData = $getStatsForRange($startDate, $endDate);
+            $prevData = $getStatsForRange($prevStart, $prevEnd);
+
+            $currentGlobalRev = (float)($currentData['totalRev'] ?? 0.0);
+            $currentOrderCount = (int)($currentData['totalCount'] ?? 0);
+            $currentShipping = (float)($currentData['totalShip'] ?? 0.0);
+
+            $prevGlobalRev = (float)($prevData['totalRev'] ?? 0.0);
+            $prevOrderCount = (int)($prevData['totalCount'] ?? 0);
+
+            // --- 3. TREND CALCULATION ---
+            $calcTrend = function($curr, $prev) {
+                if ($prev <= 0) return ($curr > 0) ? 100 : 0;
+                return round((($curr - $prev) / $prev) * 100, 1);
+            };
+
+            $revenueTrend = $calcTrend($currentGlobalRev, $prevGlobalRev);
+            $orderTrend = $calcTrend($currentOrderCount, $prevOrderCount);
+
+            // --- 4. NET TOTALS & BASKET ---
+            $productRevenueTTC = $currentGlobalRev - $currentShipping;
             $productRevenueHT = $productRevenueTTC / 1.2;
-
-            // --- 4. SALES TRENDS ---
-            $lastMonthRevenue = (float)($orderRepo->getRevenueBetween($startOfLastMonth, $endOfLastMonth) ?? 0.0);
-            $calculateTrend = fn($current, $previous) =>
-            $previous > 0 ? round((($current - $previous) / $previous) * 100, 1) : 0;
-            
-            $trend = $calculateTrend($currentGlobalRevenue, $lastMonthRevenue);
-
-            // Average Basket (based on gross product revenue)
-            $productRevenueBasket = $currentGlobalRevenue - $currentShippingRevenue;
-            $currentAvgBasket = $currentOrderCount > 0 ? $productRevenueBasket / $currentOrderCount : 0;
+            $avgBasket = $currentOrderCount > 0 ? $productRevenueTTC / $currentOrderCount : 0;
 
             // --- 5. BEST SELLERS ---
-            // Aggregate sales and revenue per product and variant
             $bestSellersRaw = $em->createQueryBuilder()
-                ->select(
-                    'p.name as productName',
-                    'v.name as variantName',
-                    'SUM(oi.quantity) as totalSales',
-                    'SUM(oi.quantity * oi.price) as totalRevenue'
-                )
+                ->select('p.name as pName, v.name as vName, SUM(oi.quantity) as qty, SUM(oi.quantity * oi.price) as rev')
                 ->from(OrderItem::class, 'oi')
                 ->join('oi.product', 'p')
                 ->leftJoin('oi.variant', 'v')
                 ->join('oi.order', 'o')
-                ->where('o.status IN (:statuses)')
-                ->setParameter('statuses', ['paid', 'shipped', 'completed'])
+                ->where('o.createdAt BETWEEN :start AND :end')
+                ->andWhere('o.status IN (:statuses)')
+                ->setParameter('start', $startDate)
+                ->setParameter('end', $endDate)
+                ->setParameter('statuses', $statuses)
                 ->groupBy('p.id', 'v.id')
-                ->orderBy('totalSales', 'DESC')
+                ->orderBy('qty', 'DESC')
                 ->setMaxResults(5)
                 ->getQuery()->getResult();
 
             $bestSellers = array_map(fn($b) => [
-                'name' => $b['productName'] . ($b['variantName'] ? ' (' . $b['variantName'] . ')' : ''),
-                'sales' => (int)$b['totalSales'],
-                'revenue' => number_format((float)$b['totalRevenue'], 2, '.', '')
+                'name' => $b['pName'] . ($b['vName'] ? ' (' . $b['vName'] . ')' : ''),
+                'sales' => (int)$b['qty'],
+                'revenue' => number_format((float)$b['rev'], 2, '.', '')
             ], $bestSellersRaw);
 
-            // --- 6. RECENT ACTIVITIES ---
-            $recentOrdersRaw = $orderRepo->findBy([], ['createdAt' => 'DESC'], 5);
-            $recentOrders = array_map(function ($o) {
-                $shipping = $o->getShippingInfo();
-                return [
-                    'id' => $o->getId(),
-                    'customerName' => $shipping ? ($shipping->getFirstName() . ' ' . $shipping->getLastName()) : 'Client Inconnu',
-                    'total' => number_format((float)$o->getTotal(), 2, '.', ''),
-                    'date' => $o->getCreatedAt()->format('d/m H:i'),
-                    'status' => $o->getStatus()
-                ];
-            }, $recentOrdersRaw);
+            // --- 6. CHART DATA ---
+            $chartDataMap = [];
+            $interval = new \DateInterval($intervalSpec);
+            // Add a small buffer to end date to ensure the last point is included
+            $chartEnd = (clone $endDate)->modify($period === 'today' ? '+0 second' : '+1 day');
+            $datePeriod = new \DatePeriod($startDate, $interval, $chartEnd);
 
-            $toPrepareCount = (int)$orderRepo->count(['status' => 'paid']);
+            foreach ($datePeriod as $dt) {
+                $key = $dt->format($chartKeyFormat);
+                $display = $dt->format($chartDisplayFormat);
+                
+                if ($period === 'year') {
+                    $monthsFr = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+                    $display = $monthsFr[(int)$dt->format('n') - 1];
+                }
+                $chartDataMap[$key] = ['name' => $display, 'sales' => 0];
+            }
 
+            $ordersForChart = $orderRepo->createQueryBuilder('o')
+                ->where('o.createdAt BETWEEN :start AND :end')
+                ->andWhere('o.status IN (:statuses)')
+                ->setParameter('start', $startDate)
+                ->setParameter('end', $endDate)
+                ->setParameter('statuses', $statuses)
+                ->getQuery()->getResult();
+
+            foreach ($ordersForChart as $o) {
+                $key = $o->getCreatedAt()->format($chartKeyFormat);
+                if (isset($chartDataMap[$key])) {
+                    $chartDataMap[$key]['sales'] += ($o->getTotal() - $o->getShippingCost());
+                }
+            }
+
+            // --- 7. FINAL RESPONSE ---
             return $this->json([
                 'revenue' => [
                     'productTTC' => number_format($productRevenueTTC, 2, ',', ' ') . ' €',
                     'productHT' => number_format($productRevenueHT, 2, ',', ' ') . ' €',
-                    'month' => $now->format('F'),
-                    'trend' => $trend
+                    'month' => $periodLabel,
+                    'trend' => $revenueTrend
                 ],
                 'orders' => [
                     'count' => $currentOrderCount,
-                    'trend' => 0
+                    'trend' => $orderTrend
                 ],
                 'basket' => [
-                    'value' => number_format($currentAvgBasket, 2, ',', ' ') . ' €',
+                    'value' => number_format($avgBasket, 2, ',', ' ') . ' €',
                 ],
                 'bestSellers' => $bestSellers,
-                'recentOrders' => $recentOrders,
-                'chartData' => [
-                    ['name' => 'Sem 1', 'sales' => round($currentGlobalRevenue * 0.25, 2)],
-                    ['name' => 'Sem 2', 'sales' => round($currentGlobalRevenue * 0.45, 2)],
-                    ['name' => 'Sem 3', 'sales' => round($currentGlobalRevenue * 0.75, 2)],
-                    ['name' => 'Sem 4', 'sales' => round($currentGlobalRevenue, 2)],
-                ],
+                'chartData' => array_values($chartDataMap),
                 'logistics' => [
-                    'toPrepare' => $toPrepareCount
+                    'toPrepare' => (int)$orderRepo->count(['status' => 'paid'])
                 ],
             ]);
+
         } catch (\Exception $e) {
-            return $this->json(['error' => $e->getMessage(), 'line' => $e->getLine()], 500);
+            return $this->json(['error' => $e->getMessage()], 500);
         }
     }
 }
