@@ -42,7 +42,8 @@ class ProductVariantRepository extends ServiceEntityRepository
         return $this->createQueryBuilder('v')
             ->andWhere('v.product = :productId')
             ->setParameter('productId', $productId)
-            ->orderBy('v.id', 'ASC')
+            ->orderBy('v.position', 'ASC') 
+            ->addOrderBy('v.id', 'ASC')
             ->getQuery()
             ->getResult();
     }
@@ -51,4 +52,5 @@ class ProductVariantRepository extends ServiceEntityRepository
     {
         return $this->findOneBy(['sku' => $sku]);
     }
+    
 }

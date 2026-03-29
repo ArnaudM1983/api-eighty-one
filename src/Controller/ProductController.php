@@ -384,6 +384,7 @@ class ProductController extends AbstractController
         $formatImagePath = fn(?string $path) => $path ? '/' . ltrim($path, '/') : null;
 
         $variants = $p->getVariants()->toArray();
+        usort($variants, fn($a, $b) => $a->getPosition() <=> $b->getPosition());
         $totalStock = $p->getStock();
 
         if (count($variants) > 0) {

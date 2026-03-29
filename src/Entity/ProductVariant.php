@@ -34,6 +34,9 @@ class ProductVariant
     #[ORM\Column(type: 'json', nullable: true)]
     private ?array $attributes = null;
 
+    #[ORM\Column(type: 'integer', options: ['default' => 0])]
+    private int $position = 0;
+
     #[ORM\ManyToOne(inversedBy: 'variants')]
     #[ORM\JoinColumn(nullable: false)]
     private ?Product $product = null;
@@ -130,6 +133,18 @@ class ProductVariant
         return $this;
     }
 
+    // Position
+    public function getPosition(): int
+    {
+        return $this->position;
+    }
+
+    public function setPosition(int $position): self
+    {
+        $this->position = $position;
+        return $this;
+    }
+
     // Product (relation ManyToOne)
     public function getProduct(): ?Product
     {
@@ -141,6 +156,4 @@ class ProductVariant
         $this->product = $product;
         return $this;
     }
-
-    
 }

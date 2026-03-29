@@ -66,11 +66,11 @@ class ProductVariantController extends AbstractController
         $variant = new ProductVariant();
         $variant->setName($data['name'] ?? '');
         $variant->setSku($data['sku'] ?? null);
-        
+
         // Stock, Image, and Attributes (No inheritance required for these)
         $variant->setStock(isset($data['stock']) ? (int)$data['stock'] : 0);
         $variant->setImage($data['image'] ?? null);
-        
+
         // Clean attribute handling (set to NULL if empty to avoid empty JSON arrays)
         $attributes = $data['attributes'] ?? null;
         $variant->setAttributes(!empty($attributes) ? $attributes : null);
@@ -80,11 +80,11 @@ class ProductVariantController extends AbstractController
 
         if ($pId) {
             $product = $this->em->getRepository(Product::class)->find($pId);
-            
+
             if (!$product) {
                 return $this->json(['error' => 'Produit parent introuvable'], 404);
             }
-            
+
             $variant->setProduct($product);
 
             // --- 1. PRICE INHERITANCE LOGIC ---
@@ -102,7 +102,6 @@ class ProductVariantController extends AbstractController
             } else {
                 $variant->setWeight($product->getWeight());
             }
-
         } else {
             return $this->json(['error' => 'L\'ID du produit parent est requis'], 400);
         }
@@ -143,6 +142,34 @@ class ProductVariantController extends AbstractController
     }
 
     /**
+     * CRUD: Post
+     * HTTP Method: Post
+     * URL: /api/reorder
+     * Bulk reorder variant positions.
+     **/
+    #[Route('/reorder', methods: ['POST'])]
+    #[IsGranted('ROLE_ADMIN')]
+    public function reorder(Request $request): JsonResponse
+    {
+        $data = json_decode($request->getContent(), true);
+
+        if (!isset($data['variants']) || !is_array($data['variants'])) {
+            return $this->json(['error' => 'Invalid data'], 400);
+        }
+
+        foreach ($data['variants'] as $item) {
+            $variant = $this->repo->find($item['id']);
+            if ($variant) {
+                $variant->setPosition((int) $item['position']);
+            }
+        }
+
+        $this->em->flush();
+
+        return $this->json(['message' => 'Variant order updated']);
+    }
+
+    /**
      * CRUD: Delete
      * HTTP Method: DELETE
      * URL: /api/variants/{id}
@@ -171,8 +198,9 @@ class ProductVariantController extends AbstractController
             'sku' => $v->getSku(),
             'price' => $v->getPrice(),
             'stock' => $v->getStock(),
-            'image' => $formatImagePath($v->getImage()), 
+            'image' => $formatImagePath($v->getImage()),
             'attributes' => $v->getAttributes(),
+            'position' => $v->getPosition(), 
             'product' => $v->getProduct() ? ['id' => $v->getProduct()->getId(), 'name' => $v->getProduct()->getName()] : null
         ];
     }
