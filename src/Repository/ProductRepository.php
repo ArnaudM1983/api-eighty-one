@@ -39,7 +39,7 @@ class ProductRepository extends ServiceEntityRepository
             ->andWhere('c = :category')
             ->setParameter('category', $category)
             ->orderBy('p.position', 'ASC')
-            ->addOrderBy('p.id', 'DESC') 
+            ->addOrderBy('p.id', 'DESC')
             ->getQuery()
             ->getResult();
     }
