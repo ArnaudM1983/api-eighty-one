@@ -37,6 +37,9 @@ class ProductVariant
     #[ORM\Column(type: 'integer', options: ['default' => 0])]
     private int $position = 0;
 
+    #[ORM\Column(type: 'boolean', options: ['default' => true])]
+    private bool $active = true;
+
     #[ORM\ManyToOne(inversedBy: 'variants')]
     #[ORM\JoinColumn(nullable: false)]
     private ?Product $product = null;
@@ -142,6 +145,18 @@ class ProductVariant
     public function setPosition(int $position): self
     {
         $this->position = $position;
+        return $this;
+    }
+
+    // Visibility
+    public function isActive(): bool
+    {
+        return $this->active;
+    }
+
+    public function setActive(bool $active): self
+    {
+        $this->active = $active;
         return $this;
     }
 
