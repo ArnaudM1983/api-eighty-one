@@ -130,6 +130,7 @@ class ProductVariantController extends AbstractController
         if (isset($data['stock'])) $variant->setStock($data['stock']);
         if (isset($data['image'])) $variant->setImage($data['image']);
         if (isset($data['attributes'])) $variant->setAttributes($data['attributes']);
+        if (isset($data['active'])) $variant->setActive((bool)$data['active']);
 
         if (!empty($data['product_id'])) {
             $product = $this->em->getRepository(Product::class)->find($data['product_id']);
@@ -201,6 +202,7 @@ class ProductVariantController extends AbstractController
             'image' => $formatImagePath($v->getImage()),
             'attributes' => $v->getAttributes(),
             'position' => $v->getPosition(), 
+            'active' => $v->isActive(),
             'product' => $v->getProduct() ? ['id' => $v->getProduct()->getId(), 'name' => $v->getProduct()->getName()] : null
         ];
     }

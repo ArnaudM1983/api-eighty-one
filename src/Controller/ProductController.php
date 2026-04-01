@@ -424,7 +424,8 @@ class ProductController extends AbstractController
                 'price' => $v->getPrice(),
                 'stock' => $v->getStock(),
                 'image' => $formatImagePath($v->getImage()),
-                'attributes' => $v->getAttributes()
+                'attributes' => $v->getAttributes(),
+                'active' => $v->isActive()
             ], $variants),
             'stock' => $totalStock,
             'has_variants' => count($variants) > 0,
