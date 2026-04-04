@@ -1,6 +1,6 @@
 # API E-Commerce "Eighty-One Store"
 
-Ce dépôt contient le code source de l'API backend pour la boutique en ligne "Eighty-One Store". Il s'agit d'une application Symfony robuste qui gère les produits, les commandes, les paiements, les utilisateurs et bien plus encore.
+Ce dépôt contient le code source de l'API backend pour la boutique en ligne "Eighty-One Store". Il s'agit d'une application Symfony qui gère les produits, les commandes, les paiements, les utilisateurs et bien plus encore.
 
 ## 🚀 Fonctionnalités Principales
 
