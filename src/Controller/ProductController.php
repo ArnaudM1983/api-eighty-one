@@ -350,14 +350,16 @@ class ProductController extends AbstractController
     private function serializeProductWithoutVariants(Product $product): array
     {
         $variants = $product->getVariants();
+        $variantsCount = $variants->count(); 
         $totalStock = $product->getStock();
 
-        if ($variants->count() > 0) {
+        if ($variantsCount > 0) {
             $totalStock = 0;
             foreach ($variants as $v) {
                 $totalStock += $v->getStock();
             }
         }
+
         return [
             'id' => $product->getId(),
             'name' => $product->getName(),
@@ -372,7 +374,8 @@ class ProductController extends AbstractController
             'main_image' => $product->getMainImage(),
             'created_at' => $product->getCreatedAt()?->format('Y-m-d H:i:s'),
             'updated_at' => $product->getUpdatedAt()?->format('Y-m-d H:i:s'),
-            'has_variants' => $product->getVariants()->count() > 0,
+            'has_variants' => $variantsCount > 0,
+            'variants_count' => $variantsCount, 
         ];
     }
 
@@ -384,10 +387,11 @@ class ProductController extends AbstractController
         $formatImagePath = fn(?string $path) => $path ? '/' . ltrim($path, '/') : null;
 
         $variants = $p->getVariants()->toArray();
+        $variantsCount = count($variants); 
         usort($variants, fn($a, $b) => $a->getPosition() <=> $b->getPosition());
+        
         $totalStock = $p->getStock();
-
-        if (count($variants) > 0) {
+        if ($variantsCount > 0) {
             $totalStock = 0;
             foreach ($variants as $v) {
                 $totalStock += $v->getStock();
@@ -428,7 +432,8 @@ class ProductController extends AbstractController
                 'active' => $v->isActive()
             ], $variants),
             'stock' => $totalStock,
-            'has_variants' => count($variants) > 0,
+            'has_variants' => $variantsCount > 0,
+            'variants_count' => $variantsCount, 
 
             'related_products' => $p->getRelatedProducts()->map(fn($rp) => [
                 'id' => $rp->getId(),
