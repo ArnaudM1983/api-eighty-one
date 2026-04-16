@@ -388,7 +388,6 @@ class ProductController extends AbstractController
 
         $variants = $p->getVariants()->toArray();
         $variantsCount = count($variants); 
-        $categorySlugs = $p->getCategories()->map(fn($c) => $c->getSlug())->toArray();
         usort($variants, fn($a, $b) => $a->getPosition() <=> $b->getPosition());
         
         $totalStock = $p->getStock();
@@ -417,7 +416,6 @@ class ProductController extends AbstractController
                 'name' => $c->getName(),
                 'slug' => $c->getSlug(),
             ])->toArray(),
-            'category_slugs' => $categorySlugs,
             'images' => $p->getImages()->map(fn($i) => [
                 'id' => $i->getId(),
                 'url' => $formatImagePath($i->getUrl()),
