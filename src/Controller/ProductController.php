@@ -376,6 +376,7 @@ class ProductController extends AbstractController
             'updated_at' => $product->getUpdatedAt()?->format('Y-m-d H:i:s'),
             'has_variants' => $variantsCount > 0,
             'variants_count' => $variantsCount, 
+            'category_slugs' => $product->getCategories()->map(fn($c) => $c->getSlug())->toArray(),
         ];
     }
 
