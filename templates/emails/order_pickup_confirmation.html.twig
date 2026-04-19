@@ -1,131 +1,226 @@
 {# templates/emails/order_pickup_confirmation.html.twig #}
 <!DOCTYPE html>
 <html>
-<head>
-    <meta charset="UTF-8">
-    <style>
-        body { font-family: 'Helvetica', Arial, sans-serif; color: #333; line-height: 1.5; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #f0f0f0; }
-        .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 20px; margin-bottom: 20px; }
-        .table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-        .table th { text-align: left; background: #f8f8f8; padding: 10px; font-size: 11px; border-bottom: 1px solid #eee; }
-        .table td { padding: 10px; border-bottom: 1px solid #eee; font-size: 14px; vertical-align: middle; }
-        .total-box { text-align: right; padding: 10px; background: #fafafa; }
-        
-        .product-img { width: 50px; height: 50px; object-fit: cover; border-radius: 4px; border: 1px solid #ddd; }
-        
-        .address-section { margin-top: 30px; display: table; width: 100%; }
-        .address-column { display: table-cell; width: 50%; padding: 15px; background: #f9f9f9; border: 1px solid #eee; vertical-align: top; }
-        .address-header { font-weight: bold; text-transform: uppercase; font-size: 12px; margin-bottom: 10px; display: block; border-bottom: 1px solid #ccc; }
-        
-        .status-box { padding: 15px; text-align: center; font-weight: bold; margin-bottom: 20px; border-radius: 4px; }
-        .status-paid { background-color: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
-        .status-unpaid { background-color: #fff3e0; color: #e65100; border: 1px solid #ffe0b2; }
+	<head>
+		<meta charset="UTF-8">
+		<style>
+			body {
+				font-family: 'Helvetica', Arial, sans-serif;
+				color: #333;
+				line-height: 1.5;
+			}
+			.container {
+				max-width: 600px;
+				margin: 0 auto;
+				padding: 20px;
+				border: 1px solid #f0f0f0;
+			}
+			.header {
+				text-align: center;
+				border-bottom: 2px solid #000;
+				padding-bottom: 20px;
+				margin-bottom: 20px;
+			}
+			.table {
+				width: 100%;
+				border-collapse: collapse;
+				margin-bottom: 20px;
+			}
+			.table th {
+				text-align: left;
+				background: #f8f8f8;
+				padding: 10px;
+				font-size: 11px;
+				border-bottom: 1px solid #eee;
+			}
+			.table td {
+				padding: 10px;
+				border-bottom: 1px solid #eee;
+				font-size: 14px;
+				vertical-align: middle;
+			}
+			.total-box {
+				text-align: right;
+				padding: 10px;
+				background: #fafafa;
+			}
 
-        .footer { text-align: center; font-size: 11px; color: #999; margin-top: 40px; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1 style="margin:0;">EIGHTY ONE STORE</h1>
-            <p style="text-transform: uppercase; font-size: 12px; letter-spacing: 1px;">Confirmation de commande #{{ order.id }}</p>
-        </div>
+			.product-img {
+				width: 50px;
+				height: 50px;
+				object-fit: cover;
+				border-radius: 4px;
+				border: 1px solid #ddd;
+			}
 
-        <p>Bonjour {{ order.shippingInfo.firstName }},</p>
-        <p>Merci pour votre commande ! Vous avez choisi le <strong>retrait en magasin (Click & Collect)</strong>. Nous mettons vos articles de côté.</p>
+			.address-section {
+				margin-top: 30px;
+				display: table;
+				width: 100%;
+			}
+			.address-column {
+				display: table-cell;
+				width: 50%;
+				padding: 15px;
+				background: #f9f9f9;
+				border: 1px solid #eee;
+				vertical-align: top;
+			}
+			.address-header {
+				font-weight: bold;
+				text-transform: uppercase;
+				font-size: 12px;
+				margin-bottom: 10px;
+				display: block;
+				border-bottom: 1px solid #ccc;
+			}
 
-        {# Alerte de paiement #}
-        {% if order.status == 'paid' %}
-            <div class="status-box status-paid">
-                ✅ COMMANDE PAYÉE EN LIGNE<br>
-                <span style="font-weight: normal; font-size: 13px;">Vous n'aurez rien à régler lors du retrait.</span>
-            </div>
-        {% else %}
-            <div class="status-box status-unpaid">
-                💰 PAIEMENT À RÉALISER SUR PLACE<br>
-                <span style="font-weight: normal; font-size: 13px;">Montant à régler en boutique : {{ order.total|number_format(2, ',', ' ') }} €</span>
-            </div>
-        {% endif %}
+			.status-box {
+				padding: 15px;
+				text-align: center;
+				font-weight: bold;
+				margin-bottom: 20px;
+				border-radius: 4px;
+			}
+			.status-paid {
+				background-color: #e8f5e9;
+				color: #2e7d32;
+				border: 1px solid #c8e6c9;
+			}
+			.status-unpaid {
+				background-color: #fff3e0;
+				color: #e65100;
+				border: 1px solid #ffe0b2;
+			}
 
-        <div style="background: #fffbe6; border: 1px solid #ffe58f; padding: 15px; margin-bottom: 20px; border-radius: 4px; text-align: center;">
-    <p style="margin: 0; font-size: 14px;">
-        <strong>⏳ Prochaine étape :</strong><br>
-        Nous préparons votre commande. Vous recevrez un <strong>SMS de confirmation</strong> dès qu'elle sera prête à être retirée en boutique.
-    </p>
-</div>
+			.footer {
+				text-align: center;
+				font-size: 11px;
+				color: #999;
+				margin-top: 40px;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="container">
+			<div class="header">
+				<h1 style="margin:0;">EIGHTY ONE STORE</h1>
+				<p style="text-transform: uppercase; font-size: 12px; letter-spacing: 1px;">Confirmation de commande #{{ order.id }}</p>
+			</div>
 
-        <table class="table">
-            <thead>
-                <tr>
-                    <th style="width: 50px;">Image</th>
-                    <th>Désignation</th>
-                    <th style="text-align: center;">Qté</th>
-                    <th style="text-align: right;">Prix</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in order.items %}
-                    <tr>
-                        <td>
-                            {% set thumb = null %}
-                            {% if item.variant and item.variant.image %}
-                                {% set thumb = item.variant.image %}
-                            {% elseif item.product.mainImage %}
-                                {% set thumb = item.product.mainImage %}
-                            {% endif %}
+			<p>Bonjour
+				{{ order.shippingInfo.firstName }},</p>
+			<p>Merci pour votre commande ! Vous avez choisi le
+				<strong>retrait en magasin (Click & Collect)</strong>. Nous mettons vos articles de côté.</p>
 
-                            {% if thumb %}
-                                {% set fullImageUrl = thumb starts with 'http' ? thumb : 'http://localhost:8000' ~ thumb %}
-                                <img src="{{ fullImageUrl }}" class="product-img" alt="Produit">
-                            {% else %}
-                                <div style="width:50px; height:50px; background:#eee; line-height:50px; color:#aaa; font-size:10px; text-align: center;">N/A</div>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <strong>{{ item.product.name }}</strong>
-                            {% if item.variant %}
-                                <br><small style="color: #666;">{{ item.variant.name }}</small>
-                            {% endif %}
-                        </td>
-                        <td style="text-align: center;">{{ item.quantity }}</td>
-                        <td style="text-align: right;">{{ item.totalPrice|number_format(2, ',', ' ') }} €</td>
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+			{# Alerte de paiement #}
+			{% if order.status == 'paid' %}
+				<div class="status-box status-paid">
+					✅ COMMANDE PAYÉE EN LIGNE<br>
+					<span style="font-weight: normal; font-size: 13px;">Vous n'aurez rien à régler lors du retrait.</span>
+				</div>
+			{% else %}
+				<div class="status-box status-unpaid">
+					💰 PAIEMENT À RÉALISER SUR PLACE<br>
+					<span style="font-weight: normal; font-size: 13px;">Montant à régler en boutique :
+						{{ order.total|number_format(2, ',', ' ') }}
+						€</span>
+				</div>
+			{% endif %}
 
-        <div class="total-box">
-            <p style="margin: 5px 0;">Sous-total : {{ order.subTotal|number_format(2, ',', ' ') }} €</p>
-            <p style="margin: 5px 0;">Retrait boutique : Gratuit</p>
-            <p style="font-size: 18px; font-weight: bold; margin: 10px 0;">Total TTC : {{ order.total|number_format(2, ',', ' ') }} €</p>
-        </div>
+			<div style="background: #fffbe6; border: 1px solid #ffe58f; padding: 15px; margin-bottom: 20px; border-radius: 4px; text-align: center;">
+				<p style="margin: 0; font-size: 14px;">
+					<strong>⏳ Prochaine étape :</strong><br>
+					Nous préparons votre commande. Vous recevrez un
+					<strong>SMS de confirmation</strong>
+					dès qu'elle sera prête à être retirée en boutique.
+				</p>
+			</div>
 
-        <div class="address-section">
-            <div class="address-column">
-                <span class="address-header">Vos informations</span>
-                {{ order.shippingInfo.firstName }} {{ order.shippingInfo.lastName }}<br>
-                {{ order.shippingInfo.email }}<br>
-                {{ order.shippingInfo.phone }}
-            </div>
+			<table class="table">
+				<thead>
+					<tr>
+						<th style="width: 50px;">Image</th>
+						<th>Désignation</th>
+						<th style="text-align: center;">Qté</th>
+						<th style="text-align: right;">Prix</th>
+					</tr>
+				</thead>
+				<tbody>
+					{% for item in order.items %}
+						<tr>
+							<td>
+								{% set thumb = null %}
+								{% if item.variant and item.variant.image %}
+									{% set thumb = item.variant.image %}
+								{% elseif item.product.mainImage %}
+									{% set thumb = item.product.mainImage %}
+								{% endif %}
 
-            <div class="address-column" style="border-left: 10px solid white;">
-                <span class="address-header">📍 Lieu de retrait</span>
-                <strong>Eighty One Store</strong><br>
-                21 rue des Capucins<br>
-                69001 Lyon<br>
-                <p style="font-size: 11px; color: #666; margin-top: 5px;">
-                    <strong>Horaires :</strong><br>
-                    Lundi : 14h - 19h<br>
-                    Mardi au Samedi : 11h - 19h
-                </p>
-            </div>
-        </div>
+								{% if thumb %}
+									{% set fullImageUrl = thumb starts with 'http' ? thumb : 'http://localhost:8000' ~ thumb %}
+									<img src="{{ fullImageUrl }}" class="product-img" alt="Produit">
+								{% else %}
+									<div style="width:50px; height:50px; background:#eee; line-height:50px; color:#aaa; font-size:10px; text-align: center;">N/A</div>
+								{% endif %}
+							</td>
+							<td>
+								<strong>{{ item.product.name }}</strong>
+								{% if item.variant %}
+									<br><small style="color: #666;">{{ item.variant.name }}</small>
+								{% endif %}
+							</td>
+							<td style="text-align: center;">{{ item.quantity }}</td>
+							<td style="text-align: right;">{{ item.totalPrice|number_format(2, ',', ' ') }}
+								€</td>
+						</tr>
+					{% endfor %}
+				</tbody>
+			</table>
 
-        <div class="footer">
-            Eighty One Store - 2026<br>
-            Ceci est un message automatique, merci de ne pas y répondre.
-        </div>
-    </div>
-</body>
+			<div class="total-box">
+				<p style="margin: 5px 0;">Sous-total :
+					{{ order.subTotal|number_format(2, ',', ' ') }}
+					€</p>
+				<p style="margin: 5px 0;">Retrait boutique : Gratuit</p>
+				<p style="font-size: 18px; font-weight: bold; margin: 10px 0;">Total TTC :
+					{{ order.total|number_format(2, ',', ' ') }}
+					€</p>
+			</div>
+
+			<div class="address-section">
+				<div class="address-column">
+					<span class="address-header">Vos informations</span>
+					{{ order.shippingInfo.firstName }}
+					{{ order.shippingInfo.lastName }}<br>
+					{{ order.shippingInfo.email }}<br>
+					{{ order.shippingInfo.phone }}
+				</div>
+
+				<div class="address-column" style="border-left: 10px solid white;">
+					<span class="address-header">📍 Lieu de retrait</span>
+					<strong>Eighty One Store</strong><br>
+					21 rue des Capucins<br>
+					69001 Lyon<br>
+					<p style="font-size: 11px; color: #666; margin-top: 5px;">
+						<strong>Horaires :</strong><br>
+						Lundi : 14h - 19h<br>
+						Mardi au Samedi : 11h - 19h
+					</p>
+				</div>
+			</div>
+
+			<div class="footer">
+				<p style="margin-bottom: 10px;">
+					Ceci est un message automatique. Pour toute question concernant votre commande,<br>
+					contactez-nous directement à :
+					<a href="mailto:eightyone@hotmail.fr" style="color: #000; font-weight: bold; text-decoration: underline;">
+						eightyone@hotmail.fr
+					</a>
+				</p>
+				Eighty One Store - 2026<br>
+				21 rue des Capucins, 69001 Lyon
+			</div>
+		</div>
+	</body>
 </html>
