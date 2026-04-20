@@ -62,9 +62,9 @@ class CatalogFeedController extends AbstractController
                     $xmlContent .= '<g:link>' . $frontendBaseUrl . '/produit/' . $product->getSlug() . '?v=' . $variant->getId() . '</g:link>';
 
                     // Image logic: Use variant image if set, otherwise fallback to main product image
-                    $variantImg = $variant->getImage() ?: $product->getMainImage();
-                    $imageUrl = str_starts_with($variantImg, 'uploads/') ? $backendBaseUrl . '/' . $variantImg : $backendBaseUrl . '/uploads/' . $variantImg;
-                    $xmlContent .= '<g:image_link>' . $imageUrl . '</g:image_link>';
+                    $variantImg = ltrim($variant->getImage() ?: $product->getMainImage(), '/');
+                    $variantImg = preg_replace('/^uploads\//', '', $variantImg);
+                    $imageUrl = $backendBaseUrl . '/uploads/' . $variantImg;
 
                     // Price and Availability based on the specific variant
                     $xmlContent .= '<g:price>' . number_format($variant->getPrice(), 2, '.', '') . ' EUR</g:price>';
