@@ -21,12 +21,12 @@ class CatalogFeedController extends AbstractController
         $products = $productRepository->findAll();
 
         // --- URL CONFIGURATION ---
-        
+
         // Frontend URL (Next.js) -> Where the user is redirected from the ad
         $frontendBaseUrl = $this->getParameter('app.frontend_url');
 
         // Backend URL (Symfony) -> Where the platform downloads the product images
-        $backendBaseUrl = $request->getSchemeAndHttpHost(); 
+        $backendBaseUrl = $request->getSchemeAndHttpHost();
 
         // Building the RSS/XML structure (Google Merchant / Facebook standard)
         $xmlContent = '<?xml version="1.0"?>';
@@ -37,47 +37,71 @@ class CatalogFeedController extends AbstractController
         $xmlContent .= '<description>Flux produits pour Instagram Shopping</description>';
 
         foreach ($products as $product) {
-            // Safety check: Skip products without a price or a main image
-            if (!$product->getPrice() || !$product->getMainImage()) {
-                continue;
-            }
+            $variants = $product->getVariants();
 
-            $xmlContent .= '<item>';
-            
-            $xmlContent .= '<g:id>' . $product->getId() . '</g:id>';
-            $xmlContent .= '<g:title><![CDATA[' . $product->getName() . ']]></g:title>';
-            
-            // --- DESCRIPTION HANDLING ---
-            // If description is empty, fallback to product name
-            $rawDesc = $product->getDescription();
-            if (empty($rawDesc)) {
-                $rawDesc = $product->getName() . ' - Disponible sur 81Store.';
-            }
-            // Strip HTML tags and limit length for XML compatibility
-            $desc = strip_tags($rawDesc);
-            $xmlContent .= '<g:description><![CDATA[' . substr($desc, 0, 5000) . ']]></g:description>';
-            
-            $xmlContent .= '<g:link>' . $frontendBaseUrl . '/produit/' . $product->getSlug() . '</g:link>';
-            
-            // --- IMAGE PATH LOGIC ---
-            // Standardize the image path coming from the database
-            $imagePathInDb = $product->getMainImage(); 
-            
-            // Check if the path already contains the "uploads/" prefix to avoid duplication
-            if (str_starts_with($imagePathInDb, 'uploads/')) {
-                $imageUrl = $backendBaseUrl . '/' . $imagePathInDb;
+            if ($variants->count() > 0) {
+                // --- CASE: PRODUCT WITH VARIANTS ---
+                foreach ($variants as $variant) {
+                    $xmlContent .= '<item>';
+
+                    // Unique ID for the variant (e.g., ParentID_VariantID)
+                    $xmlContent .= '<g:id>' . $product->getId() . '_' . $variant->getId() . '</g:id>';
+
+                    // Shared ID to group variants under the same product display
+                    $xmlContent .= '<g:item_group_id>' . $product->getId() . '</g:item_group_id>';
+
+                    // Title: Product Name + Variant Name (e.g., Montana Gold - Red)
+                    $xmlContent .= '<g:title><![CDATA[' . $product->getName() . ' - ' . $variant->getName() . ']]></g:title>';
+
+                    // Description handling: Use variant description if available, fallback to parent
+                    $rawDesc = $product->getDescription() ?: $product->getName();
+                    $desc = strip_tags($rawDesc);
+                    $xmlContent .= '<g:description><![CDATA[' . substr($desc, 0, 5000) . ']]></g:description>';
+
+                    // Link to the product page (Deep linking to variant is recommended via query param)
+                    $xmlContent .= '<g:link>' . $frontendBaseUrl . '/produit/' . $product->getSlug() . '?v=' . $variant->getId() . '</g:link>';
+
+                    // Image logic: Use variant image if set, otherwise fallback to main product image
+                    $variantImg = $variant->getImage() ?: $product->getMainImage();
+                    $imageUrl = str_starts_with($variantImg, 'uploads/') ? $backendBaseUrl . '/' . $variantImg : $backendBaseUrl . '/uploads/' . $variantImg;
+                    $xmlContent .= '<g:image_link>' . $imageUrl . '</g:image_link>';
+
+                    // Price and Availability based on the specific variant
+                    $xmlContent .= '<g:price>' . number_format($variant->getPrice(), 2, '.', '') . ' EUR</g:price>';
+                    $xmlContent .= '<g:availability>' . ($variant->getStock() > 0 ? 'in stock' : 'out of stock') . '</g:availability>';
+
+                    $xmlContent .= '<g:brand>81Store</g:brand>';
+                    $xmlContent .= '<g:condition>new</g:condition>';
+
+                    $xmlContent .= '</item>';
+                }
             } else {
-                $imageUrl = $backendBaseUrl . '/uploads/' . $imagePathInDb;
+                // --- CASE: SIMPLE PRODUCT (NO VARIANTS) ---
+                if (!$product->getPrice() || !$product->getMainImage()) {
+                    continue;
+                }
+
+                $xmlContent .= '<item>';
+                $xmlContent .= '<g:id>' . $product->getId() . '</g:id>';
+                $xmlContent .= '<g:title><![CDATA[' . $product->getName() . ']]></g:title>';
+
+                $rawDesc = $product->getDescription() ?: $product->getName();
+                $desc = strip_tags($rawDesc);
+                $xmlContent .= '<g:description><![CDATA[' . substr($desc, 0, 5000) . ']]></g:description>';
+
+                $xmlContent .= '<g:link>' . $frontendBaseUrl . '/produit/' . $product->getSlug() . '</g:link>';
+
+                $mainImg = $product->getMainImage();
+                $imageUrl = str_starts_with($mainImg, 'uploads/') ? $backendBaseUrl . '/' . $mainImg : $backendBaseUrl . '/uploads/' . $mainImg;
+                $xmlContent .= '<g:image_link>' . $imageUrl . '</g:image_link>';
+
+                $xmlContent .= '<g:price>' . number_format($product->getPrice(), 2, '.', '') . ' EUR</g:price>';
+                $xmlContent .= '<g:availability>' . ($product->getStock() > 0 ? 'in stock' : 'out of stock') . '</g:availability>';
+                $xmlContent .= '<g:brand>81Store</g:brand>';
+                $xmlContent .= '<g:condition>new</g:condition>';
+
+                $xmlContent .= '</item>';
             }
-            
-            $xmlContent .= '<g:image_link>' . $imageUrl . '</g:image_link>';
-            
-            $xmlContent .= '<g:price>' . $product->getPrice() . ' EUR</g:price>';
-            $xmlContent .= '<g:availability>' . ($product->getStock() > 0 ? 'in stock' : 'out of stock') . '</g:availability>';
-            $xmlContent .= '<g:brand>81Store</g:brand>';
-            $xmlContent .= '<g:condition>new</g:condition>';
-            
-            $xmlContent .= '</item>';
         }
 
         $xmlContent .= '</channel>';
