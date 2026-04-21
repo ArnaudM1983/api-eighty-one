@@ -50,6 +50,13 @@ class ShippingInfo
     #[ORM\Column(length: 20, nullable: true)]
     private ?string $phone = null;
 
+    #[ORM\Column(type: 'text', nullable: true)]
+    #[Assert\Length(
+        max: 1000,
+        maxMessage: "Les instructions ne peuvent pas dépasser {{ limit }} caractères."
+    )]
+    private ?string $instructions = null;
+
     #[ORM\Column(length: 20, nullable: true)]
     private ?string $pudoId = null;
 
@@ -153,6 +160,16 @@ class ShippingInfo
     public function setPhone(?string $phone): self
     {
         $this->phone = $phone;
+        return $this;
+    }
+    public function getInstructions(): ?string
+    {
+        return $this->instructions;
+    }
+
+    public function setInstructions(?string $instructions): self
+    {
+        $this->instructions = $instructions;
         return $this;
     }
     public function getPudoId(): ?string
