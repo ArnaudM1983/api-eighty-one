@@ -174,6 +174,7 @@ class OrderController extends AbstractController
                 'pudoAddress' => $shipping?->getPudoAddress(),
                 'pudoPostalCode' => $shipping?->getPudoPostalCode(),
                 'pudoCity' => $shipping?->getPudoCity(),
+                'instructions' => $shipping?->getInstructions(),
             ],
 
             'items' => array_map(function ($item) {
@@ -239,6 +240,7 @@ class OrderController extends AbstractController
         $shippingInfo->setCity($data['city'] ?? '');
         $shippingInfo->setCountry($data['country'] ?? 'FR');
         $shippingInfo->setPhone($data['phone'] ?? null);
+        $shippingInfo->setInstructions($data['instructions'] ?? null);
 
         // Handle Pick-up Point (PUDO) data if applicable
         if (isset($data['pudoId'])) {

@@ -106,6 +106,19 @@
 				color: #999;
 				margin-top: 30px;
 			}
+			.instructions-box {
+				background: #fff9c4;
+				padding: 15px;
+				border: 2px dashed #fbc02d;
+				margin-bottom: 20px;
+			}
+			.instructions-title {
+				color: #f57f17;
+				font-weight: bold;
+				font-size: 13px;
+				margin-bottom: 5px;
+				text-transform: uppercase;
+			}
 		</style>
 	</head>
 	<body>
@@ -210,6 +223,16 @@
 					<span class="badge badge-pickup">RETRAIT EN BOUTIQUE</span>
 					<p style="margin-top:10px; color: #2e7d32;">
 						<strong>Retrait client prévu en magasin. Ne pas expédier.</strong>
+					</p>
+				</div>
+			{% endif %}
+
+			{# --- BLOC INSTRUCTIONS --- #}
+			{% if order.shippingInfo and order.shippingInfo.instructions is not empty %}
+				<div class="instructions-box">
+					<div class="instructions-title">⚠️ Instructions de livraison du client :</div>
+					<p style="margin:0; font-size: 15px; font-weight: bold; color: #333;">
+						{{ order.shippingInfo.instructions|nl2br }}
 					</p>
 				</div>
 			{% endif %}
