@@ -183,6 +183,12 @@ class OrderController extends AbstractController
 
             'items' => array_map(function ($item) {
                 $lineTotalTtc = (float)$item->getTotalPrice();
+                $imagePath = null;
+                if ($item->getVariant() && $item->getVariant()->getImage()) {
+                    $imagePath = $item->getVariant()->getImage();
+                } elseif ($item->getProduct()) {
+                    $imagePath = $item->getProduct()->getMainImage();
+                }
                 return [
                     'orderItemId' => $item->getId(),
                     'name' => $item->getProduct()?->getName(),
@@ -192,6 +198,7 @@ class OrderController extends AbstractController
                     'price' => $item->getPrice(),
                     'total' => $item->getTotalPrice(),
                     'taxAmount' => round($lineTotalTtc - ($lineTotalTtc / 1.2), 2),
+                    'image' => $imagePath,
                 ];
             }, $order->getItems()->toArray()),
 
