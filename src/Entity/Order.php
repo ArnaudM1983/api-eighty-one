@@ -57,8 +57,9 @@ class Order
     {
         $this->items = new ArrayCollection();
         $this->payments = new ArrayCollection();
-        $this->createdAt = new \DateTimeImmutable();
-        $this->updatedAt = new \DateTimeImmutable();
+        $now = new \DateTime('now', new \DateTimeZone('Europe/Paris'));
+        $this->createdAt = $now;
+        $this->updatedAt = $now;
     }
 
     // --- Getters / Setters ---
