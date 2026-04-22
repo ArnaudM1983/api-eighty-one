@@ -66,7 +66,11 @@ class OrderController extends AbstractController
     public function listOrders(OrderRepository $repo, Request $request): JsonResponse
     {
         $qb = $repo->createQueryBuilder('o')
+            ->leftJoin('o.shippingInfo', 's')
             ->orderBy('o.createdAt', 'DESC');
+
+        // Only show orders with email
+        $qb->andWhere('s.email IS NOT NULL');
 
         // Search by ID or Customer info
         if ($q = $request->query->get('q')) {
