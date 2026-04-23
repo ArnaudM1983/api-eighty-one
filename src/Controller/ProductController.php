@@ -86,7 +86,7 @@ class ProductController extends AbstractController
         }
     }
 
-    #[Route('/{id}', methods: ['PUT'])]
+    #[Route('/{id}', methods: ['PUT', 'PATCH'])]
     #[IsGranted('ROLE_ADMIN')]
     public function update(Request $request, Product $product): JsonResponse
     {
