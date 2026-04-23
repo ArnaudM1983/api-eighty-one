@@ -27,9 +27,6 @@ class ProductController extends AbstractController
         $this->repo = $repo;
     }
 
-    /**
-     * CRUD: List products with filters, search, and pagination.
-     */
     #[Route('', methods: ['GET'])]
     public function getAll(Request $request): JsonResponse
     {
@@ -69,9 +66,6 @@ class ProductController extends AbstractController
         ]);
     }
 
-    /**
-     * CRUD: Create a new product
-     */
     #[Route('', methods: ['POST'])]
     #[IsGranted('ROLE_ADMIN')]
     public function create(Request $request): JsonResponse
@@ -79,13 +73,10 @@ class ProductController extends AbstractController
         try {
             $data = json_decode($request->getContent(), true);
             $product = new Product();
-            
-            // Initialisation forcée des champs obligatoires pour éviter l'erreur 500
             $product->setName($data['name'] ?? 'Nouveau Produit');
             $product->setSlug($data['slug'] ?? 'nouveau-produit-' . uniqid());
             
             $this->hydrateProduct($product, $data);
-
             $this->em->persist($product);
             $this->em->flush();
 
@@ -95,9 +86,6 @@ class ProductController extends AbstractController
         }
     }
 
-    /**
-     * CRUD: Update an existing product
-     */
     #[Route('/{id}', methods: ['PUT'])]
     #[IsGranted('ROLE_ADMIN')]
     public function update(Request $request, Product $product): JsonResponse
@@ -106,7 +94,6 @@ class ProductController extends AbstractController
             $data = json_decode($request->getContent(), true);
             $this->hydrateProduct($product, $data);
             $product->setUpdatedAt(new \DateTimeImmutable());
-
             $this->em->flush();
             return $this->json($this->serializeProduct($product));
         } catch (\Exception $e) {
@@ -115,72 +102,25 @@ class ProductController extends AbstractController
     }
 
     /**
-     * Helper: Hydrate product entity safely
+     * AJOUTÉ : Récupération du stock pour éviter la 404
      */
-    private function hydrateProduct(Product $product, array $data): void
+    #[Route('/{id}/stock', methods: ['GET'])]
+    public function getStock(Product $product): JsonResponse
     {
-        if (!empty($data['name'])) $product->setName($data['name']);
-        if (!empty($data['slug'])) $product->setSlug($data['slug']);
-        if (array_key_exists('description', $data)) $product->setDescription($data['description']);
-        if (array_key_exists('excerpt', $data)) $product->setExcerpt($data['excerpt']);
-        if (array_key_exists('sku', $data)) $product->setSku($data['sku']);
-
-        if (isset($data['price'])) {
-            $product->setPrice($data['price']);
-            foreach ($product->getVariants() as $variant) {
-                $variant->setPrice($data['price']);
-            }
+        // On utilise la même logique de calcul que le serializer
+        $variants = $product->getVariants();
+        $totalStock = count($variants) > 0 ? 0 : $product->getStock();
+        foreach ($variants as $v) {
+            $totalStock += $v->getStock();
         }
 
-        if (array_key_exists('stock', $data)) $product->setStock($data['stock'] !== null ? (int)$data['stock'] : 0);
-        if (array_key_exists('weight', $data)) $product->setWeight($data['weight'] !== null ? (float)$data['weight'] : 0.0);
-        if (array_key_exists('featured', $data)) $product->setFeatured((bool)$data['featured']);
-        if (isset($data['main_image'])) $product->setMainImage($data['main_image']);
-
-        if (isset($data['faq']) && is_array($data['faq'])) {
-            $product->setFaq($data['faq']);
-        }
-
-        // Catégories : Nettoyage et réassignation
-        if (isset($data['category_ids']) && is_array($data['category_ids'])) {
-            $product->getCategories()->clear();
-            foreach ($data['category_ids'] as $catId) {
-                $category = $this->em->getRepository(Category::class)->find($catId);
-                if ($category) $product->addCategory($category);
-            }
-        }
-
-        // Images : Utilisation de toArray pour éviter les erreurs d'index Doctrine
-        if (isset($data['images']) && is_array($data['images'])) {
-            foreach ($product->getImages()->toArray() as $image) {
-                $product->removeImage($image);
-            }
-            foreach ($data['images'] as $imgData) {
-                if (!empty($imgData['url'])) {
-                    $newImage = new ProductImage();
-                    $newImage->setUrl(ltrim($imgData['url'], '/'));
-                    $newImage->setAlt($imgData['alt'] ?? $product->getName());
-                    $product->addImage($newImage);
-                }
-            }
-        }
-
-        // Produits liés
-        if (isset($data['related_product_ids']) && is_array($data['related_product_ids'])) {
-            $product->getRelatedProducts()->clear();
-            foreach ($data['related_product_ids'] as $relatedId) {
-                $relatedProd = $this->repo->find($relatedId);
-                if ($relatedProd && $relatedProd->getId() !== $product->getId()) {
-                    $product->addRelatedProduct($relatedProd);
-                }
-            }
-        }
+        return $this->json(['stock' => $totalStock]);
     }
 
     /**
-     * Update product stock level (PATCH).
+     * MODIFIÉ : Route PATCH sur /{id}/stock pour être cohérent avec le GET
      */
-    #[Route('/{id}', methods: ['PATCH'])]
+    #[Route('/{id}/stock', methods: ['PATCH'])]
     #[IsGranted('ROLE_ADMIN')]
     public function updateStock(Request $request, Product $product): JsonResponse
     {
@@ -201,17 +141,66 @@ class ProductController extends AbstractController
         return $this->json(['error' => 'Donnée manquante'], 400);
     }
 
-    /**
-     * Bulk reorder product positions.
-     */
+    private function hydrateProduct(Product $product, array $data): void
+    {
+        if (!empty($data['name'])) $product->setName($data['name']);
+        if (!empty($data['slug'])) $product->setSlug($data['slug']);
+        if (array_key_exists('description', $data)) $product->setDescription($data['description']);
+        if (array_key_exists('excerpt', $data)) $product->setExcerpt($data['excerpt']);
+        if (array_key_exists('sku', $data)) $product->setSku($data['sku']);
+
+        if (isset($data['price'])) {
+            $product->setPrice($data['price']);
+            foreach ($product->getVariants() as $variant) {
+                $variant->setPrice($data['price']);
+            }
+        }
+
+        if (array_key_exists('stock', $data)) $product->setStock($data['stock'] !== null ? (int)$data['stock'] : 0);
+        if (array_key_exists('weight', $data)) $product->setWeight($data['weight'] !== null ? (float)$data['weight'] : 0.0);
+        if (array_key_exists('featured', $data)) $product->setFeatured((bool)$data['featured']);
+        if (isset($data['main_image'])) $product->setMainImage($data['main_image']);
+        if (isset($data['faq']) && is_array($data['faq'])) $product->setFaq($data['faq']);
+
+        if (isset($data['category_ids']) && is_array($data['category_ids'])) {
+            $product->getCategories()->clear();
+            foreach ($data['category_ids'] as $catId) {
+                $category = $this->em->getRepository(Category::class)->find($catId);
+                if ($category) $product->addCategory($category);
+            }
+        }
+
+        if (isset($data['images']) && is_array($data['images'])) {
+            foreach ($product->getImages()->toArray() as $image) {
+                $product->removeImage($image);
+            }
+            foreach ($data['images'] as $imgData) {
+                if (!empty($imgData['url'])) {
+                    $newImage = new ProductImage();
+                    $newImage->setUrl(ltrim($imgData['url'], '/'));
+                    $newImage->setAlt($imgData['alt'] ?? $product->getName());
+                    $product->addImage($newImage);
+                }
+            }
+        }
+
+        if (isset($data['related_product_ids']) && is_array($data['related_product_ids'])) {
+            $product->getRelatedProducts()->clear();
+            foreach ($data['related_product_ids'] as $relatedId) {
+                $relatedProd = $this->repo->find($relatedId);
+                if ($relatedProd && $relatedProd->getId() !== $product->getId()) {
+                    $product->addRelatedProduct($relatedProd);
+                }
+            }
+        }
+    }
+
     #[Route('/reorder', methods: ['POST'])]
     #[IsGranted('ROLE_ADMIN')]
     public function reorder(Request $request): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
-        if (!isset($data['products']) || !is_array($data['products'])) {
-            return $this->json(['error' => 'Invalid data'], 400);
-        }
+        if (!isset($data['products']) || !is_array($data['products'])) return $this->json(['error' => 'Invalid data'], 400);
 
         try {
             foreach ($data['products'] as $item) {
@@ -253,7 +242,6 @@ class ProductController extends AbstractController
     {
         $category = $categoryRepo->findOneBy(['slug' => $slug]);
         if (!$category) return $this->json(['error' => 'Category not found'], 404);
-
         $products = $this->repo->findByCategory($category);
         $data = array_map(fn($p) => $this->serializeProductWithoutVariants($p), $products);
         return $this->json($data);
