@@ -1,5 +1,3 @@
-Bon
-
 <?php
 
 namespace App\Controller;
