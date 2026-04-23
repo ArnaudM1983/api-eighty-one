@@ -130,7 +130,7 @@ class ProductController extends AbstractController
 
 
     /**
-     * CRUD: Create a new product with categories, images, and related products.
+     * CRUD: Create a new product
      */
     #[Route('', methods: ['POST'])]
     #[IsGranted('ROLE_ADMIN')]
@@ -139,40 +139,7 @@ class ProductController extends AbstractController
         $data = json_decode($request->getContent(), true);
 
         $product = new Product();
-        $product->setName($data['name'] ?? '');
-        $product->setSlug($data['slug'] ?? '');
-        $product->setDescription($data['description'] ?? null);
-        $product->setExcerpt($data['excerpt'] ?? null);
-        $product->setSku($data['sku'] ?? null);
-        $product->setPrice($data['price'] ?? null);
-        $product->setStock($data['stock'] ?? null);
-        $product->setWeight(isset($data['weight']) ? (float)$data['weight'] : null);
-        $product->setFeatured($data['featured'] ?? false);
-        $product->setMainImage($data['main_image'] ?? null);
-
-        // Assign Categories
-        foreach ($data['category_ids'] ?? [] as $catId) {
-            $category = $this->em->getRepository(Category::class)->find($catId);
-            if ($category) $product->addCategory($category);
-        }
-
-        // Handle Gallery Images
-        foreach ($data['images'] ?? [] as $imgData) {
-            $image = new ProductImage();
-            $image->setUrl($imgData['url']);
-            $image->setAlt($imgData['alt'] ?? null);
-            $product->addImage($image);
-        }
-
-        // Handle Related Products
-        if (isset($data['related_product_ids']) && is_array($data['related_product_ids'])) {
-            foreach ($data['related_product_ids'] as $relatedId) {
-                $relatedProd = $this->repo->find($relatedId);
-                if ($relatedProd) {
-                    $product->addRelatedProduct($relatedProd);
-                }
-            }
-        }
+        $this->hydrateProduct($product, $data);
 
         $this->em->persist($product);
         $this->em->flush();
@@ -182,7 +149,7 @@ class ProductController extends AbstractController
 
 
     /**
-     * CRUD: Update an existing product and synchronize variants.
+     * CRUD: Update an existing product
      */
     #[Route('/{id}', methods: ['PUT'])]
     #[IsGranted('ROLE_ADMIN')]
@@ -190,13 +157,25 @@ class ProductController extends AbstractController
     {
         $data = json_decode($request->getContent(), true);
 
+        $this->hydrateProduct($product, $data);
+        $product->setUpdatedAt(new \DateTimeImmutable());
+
+        $this->em->flush();
+
+        return $this->json($this->serializeProduct($product));
+    }
+
+    /**
+     * Helper: Hydrate product entity from array data
+     */
+    private function hydrateProduct(Product $product, array $data): void
+    {
         if (isset($data['name'])) $product->setName($data['name']);
         if (isset($data['slug'])) $product->setSlug($data['slug']);
         if (isset($data['description'])) $product->setDescription($data['description']);
         if (isset($data['excerpt'])) $product->setExcerpt($data['excerpt']);
         if (isset($data['sku'])) $product->setSku($data['sku']);
 
-        // Price Synchronization with variants
         if (isset($data['price'])) {
             $newPrice = $data['price'];
             $product->setPrice($newPrice);
@@ -204,42 +183,44 @@ class ProductController extends AbstractController
                 $variant->setPrice($newPrice);
             }
         }
-        if (isset($data['stock'])) $product->setStock($data['stock']);
-        if (isset($data['weight'])) $product->setWeight($data['weight']);
-        if (isset($data['featured'])) $product->setFeatured($data['featured']);
+
+        if (isset($data['stock'])) $product->setStock((int) $data['stock']);
+        if (isset($data['weight'])) $product->setWeight((float) $data['weight']);
+        if (isset($data['featured'])) $product->setFeatured((bool) $data['featured']);
         if (isset($data['main_image'])) $product->setMainImage($data['main_image']);
 
-        // Update Categories
+        // FAQ
+        if (isset($data['faq']) && is_array($data['faq'])) {
+            $product->setFaq($data['faq']);
+        }
+
+        // Categories
         if (isset($data['category_ids'])) {
             foreach ($product->getCategories() as $category) {
                 $product->removeCategory($category);
             }
             foreach ($data['category_ids'] as $catId) {
                 $category = $this->em->getRepository(Category::class)->find($catId);
-                if ($category) {
-                    $product->addCategory($category);
-                }
+                if ($category) $product->addCategory($category);
             }
         }
 
-        // Update Gallery Images
+        // Gallery Images
         if (isset($data['images'])) {
-            $currentImages = $product->getImages();
-            foreach ($currentImages as $image) {
+            foreach ($product->getImages() as $image) {
                 $product->removeImage($image);
             }
             foreach ($data['images'] as $imgData) {
                 if (!empty($imgData['url'])) {
                     $newImage = new ProductImage();
-                    $url = ltrim($imgData['url'], '/');
-                    $newImage->setUrl($url);
-                    $newImage->setAlt($product->getName());
+                    $newImage->setUrl(ltrim($imgData['url'], '/'));
+                    $newImage->setAlt($imgData['alt'] ?? $product->getName());
                     $product->addImage($newImage);
                 }
             }
         }
 
-        // Update Related Products
+        // Related Products
         if (isset($data['related_product_ids']) && is_array($data['related_product_ids'])) {
             foreach ($product->getRelatedProducts() as $related) {
                 $product->removeRelatedProduct($related);
@@ -251,12 +232,6 @@ class ProductController extends AbstractController
                 }
             }
         }
-
-        $product->setUpdatedAt(new \DateTimeImmutable());
-
-        $this->em->flush();
-
-        return $this->json($this->serializeProduct($product));
     }
 
     /**
@@ -435,6 +410,7 @@ class ProductController extends AbstractController
             'stock' => $totalStock,
             'has_variants' => $variantsCount > 0,
             'variants_count' => $variantsCount, 
+            'faq' => $p->getFaq(),
 
             'related_products' => $p->getRelatedProducts()->map(fn($rp) => [
                 'id' => $rp->getId(),
