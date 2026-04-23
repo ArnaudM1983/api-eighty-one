@@ -6,6 +6,7 @@ use App\Repository\ProductRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
+use Doctrine\DBAL\Types\Types;
 
 #[ORM\Entity(repositoryClass: ProductRepository::class)]
 class Product
@@ -48,6 +49,9 @@ class Product
     #[ORM\Column(type: 'integer', options: ['default' => 0])]
     private ?int $position = 0;
 
+    #[ORM\Column(type: Types::JSON)]
+    private array $faq = [];
+
     #[ORM\Column(type: 'datetime')]
     private \DateTimeInterface $createdAt;
 
@@ -75,6 +79,7 @@ class Product
         $this->relatedProducts = new ArrayCollection(); 
         $this->createdAt = new \DateTimeImmutable();
         $this->updatedAt = new \DateTimeImmutable();
+        $this->faq = [];
     }
 
     // Getters & Setters
@@ -322,6 +327,17 @@ class Product
     public function removeRelatedProduct(self $product): self
     {
         $this->relatedProducts->removeElement($product);
+        return $this;
+    }
+
+    public function getFaq(): array
+    {
+        return $this->faq ?? [];
+    }
+
+    public function setFaq(?array $faq): self
+    {
+        $this->faq = $faq ?? [];
         return $this;
     }
 }
