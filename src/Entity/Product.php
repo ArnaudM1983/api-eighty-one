@@ -49,8 +49,8 @@ class Product
     #[ORM\Column(type: 'integer', options: ['default' => 0])]
     private ?int $position = 0;
 
-    #[ORM\Column(type: Types::JSON)]
-    private array $faq = [];
+    #[ORM\Column(type: Types::JSON, nullable: true)]
+    private ?array $faq = [];
 
     #[ORM\Column(type: 'datetime')]
     private \DateTimeInterface $createdAt;

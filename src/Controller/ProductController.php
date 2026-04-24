@@ -86,7 +86,7 @@ class ProductController extends AbstractController
         }
     }
 
-    #[Route('/{id}', methods: ['PUT', 'PATCH'])]
+    #[Route('/{id}', methods: ['PUT'])]
     #[IsGranted('ROLE_ADMIN')]
     public function update(Request $request, Product $product): JsonResponse
     {
@@ -120,7 +120,7 @@ class ProductController extends AbstractController
     /**
      * MODIFIÉ : Route PATCH sur /{id}/stock pour être cohérent avec le GET
      */
-    #[Route('/{id}/stock', methods: ['PATCH'])]
+    #[Route('/{id}', methods: ['PATCH'])]
     #[IsGranted('ROLE_ADMIN')]
     public function updateStock(Request $request, Product $product): JsonResponse
     {
@@ -129,7 +129,7 @@ class ProductController extends AbstractController
         if (array_key_exists('stock', $data)) {
             $product->setStock((int) $data['stock']);
             $product->setUpdatedAt(new \DateTimeImmutable());
-            
+
             try {
                 $this->em->flush();
                 return $this->json(['message' => 'Stock mis à jour', 'stock' => $product->getStock()]);
