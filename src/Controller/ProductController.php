@@ -299,7 +299,8 @@ class ProductController extends AbstractController
                 'sku' => $v->getSku(),
                 'price' => $v->getPrice(),
                 'stock' => $v->getStock(),
-                'image' => $formatImagePath($v->getImage())
+                'image' => $formatImagePath($v->getImage()),
+                'active' => $v->isActive()
             ], $variants),
             'faq' => $p->getFaq(),
             'related_products' => $p->getRelatedProducts()->map(fn($rp) => ['id' => $rp->getId(), 'name' => $rp->getName(), 'price' => $rp->getPrice(), 'main_image' => $formatImagePath($rp->getMainImage()), 'slug' => $rp->getSlug()])->toArray(),
