@@ -43,7 +43,7 @@ class ProductController extends AbstractController
             foreach ($keywords as $index => $word) {
                 $pName = 'q' . $index;
                 $qb->andWhere("p.name LIKE :$pName OR p.sku LIKE :$pName OR v.name LIKE :$pName OR v.sku LIKE :$pName")
-                   ->setParameter($pName, '%' . $word . '%');
+                    ->setParameter($pName, '%' . $word . '%');
             }
         }
 
@@ -75,7 +75,7 @@ class ProductController extends AbstractController
             $product = new Product();
             $product->setName($data['name'] ?? 'Nouveau Produit');
             $product->setSlug($data['slug'] ?? 'nouveau-produit-' . uniqid());
-            
+
             $this->hydrateProduct($product, $data);
             $this->em->persist($product);
             $this->em->flush();
@@ -269,9 +269,11 @@ class ProductController extends AbstractController
     {
         $formatImagePath = fn(?string $path) => $path ? '/' . ltrim($path, '/') : null;
         $variants = $p->getVariants()->toArray();
-        usort($variants, fn($a, $b) => $a->getPosition() <=> $b->getPosition());
-        
-        $totalStock = count($variants) > 0 ? 0 : $p->getStock();
+
+        $variantsCount = count($variants);
+        $hasVariants = $variantsCount > 0;
+
+        $totalStock = $hasVariants ? 0 : $p->getStock();
         foreach ($variants as $v) $totalStock += $v->getStock();
 
         return [
@@ -286,10 +288,18 @@ class ProductController extends AbstractController
             'featured' => $p->isFeatured(),
             'main_image' => $formatImagePath($p->getMainImage()),
             'stock' => $totalStock,
+            'has_variants' => $hasVariants,
+            'variants_count' => $variantsCount,
+            'category_slugs' => $p->getCategories()->map(fn($c) => $c->getSlug())->toArray(),
             'categories' => $p->getCategories()->map(fn($c) => ['id' => $c->getId(), 'name' => $c->getName(), 'slug' => $c->getSlug()])->toArray(),
             'images' => $p->getImages()->map(fn($i) => ['id' => $i->getId(), 'url' => $formatImagePath($i->getUrl()), 'alt' => $i->getAlt()])->toArray(),
             'variants' => array_map(fn($v) => [
-                'id' => $v->getId(), 'name' => $v->getName(), 'sku' => $v->getSku(), 'price' => $v->getPrice(), 'stock' => $v->getStock(), 'image' => $formatImagePath($v->getImage())
+                'id' => $v->getId(),
+                'name' => $v->getName(),
+                'sku' => $v->getSku(),
+                'price' => $v->getPrice(),
+                'stock' => $v->getStock(),
+                'image' => $formatImagePath($v->getImage())
             ], $variants),
             'faq' => $p->getFaq(),
             'related_products' => $p->getRelatedProducts()->map(fn($rp) => ['id' => $rp->getId(), 'name' => $rp->getName(), 'price' => $rp->getPrice(), 'main_image' => $formatImagePath($rp->getMainImage()), 'slug' => $rp->getSlug()])->toArray(),
