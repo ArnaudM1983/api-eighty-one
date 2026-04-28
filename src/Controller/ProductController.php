@@ -250,6 +250,8 @@ class ProductController extends AbstractController
     private function serializeProductWithoutVariants(Product $product): array
     {
         $variants = $product->getVariants();
+        $variantsCount = $variants->count();
+        $hasVariants = $variantsCount > 0;
         $totalStock = $variants->count() > 0 ? 0 : $product->getStock();
         foreach ($variants as $v) $totalStock += $v->getStock();
 
@@ -262,6 +264,8 @@ class ProductController extends AbstractController
             'stock' => $totalStock,
             'main_image' => $product->getMainImage(),
             'category_slugs' => $product->getCategories()->map(fn($c) => $c->getSlug())->toArray(),
+            'has_variants' => $hasVariants,
+            'variants_count' => $variantsCount,
         ];
     }
 
