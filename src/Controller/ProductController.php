@@ -270,6 +270,8 @@ class ProductController extends AbstractController
         $formatImagePath = fn(?string $path) => $path ? '/' . ltrim($path, '/') : null;
         $variants = $p->getVariants()->toArray();
 
+        usort($variants, fn($a, $b) => $a->getPosition() <=> $b->getPosition());
+
         $variantsCount = count($variants);
         $hasVariants = $variantsCount > 0;
 
@@ -300,7 +302,8 @@ class ProductController extends AbstractController
                 'price' => $v->getPrice(),
                 'stock' => $v->getStock(),
                 'image' => $formatImagePath($v->getImage()),
-                'active' => $v->isActive()
+                'active' => $v->isActive(),
+                'position' => $v->getPosition()
             ], $variants),
             'faq' => $p->getFaq(),
             'related_products' => $p->getRelatedProducts()->map(fn($rp) => ['id' => $rp->getId(), 'name' => $rp->getName(), 'price' => $rp->getPrice(), 'main_image' => $formatImagePath($rp->getMainImage()), 'slug' => $rp->getSlug()])->toArray(),
