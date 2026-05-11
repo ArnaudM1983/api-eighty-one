@@ -57,6 +57,30 @@ class ShippingInfo
     )]
     private ?string $instructions = null;
 
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $billingFirstName = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $billingLastName = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $billingAddress = null;
+
+    #[ORM\Column(length: 100, nullable: true)]
+    private ?string $billingCity = null;
+
+    #[ORM\Column(length: 20, nullable: true)]
+    private ?string $billingPostalCode = null;
+
+    #[ORM\Column(length: 100, nullable: true)]
+    private ?string $billingCountry = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $company = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $billingCompany = null;
+
     #[ORM\Column(length: 20, nullable: true)]
     private ?string $pudoId = null;
 
@@ -172,6 +196,95 @@ class ShippingInfo
         $this->instructions = $instructions;
         return $this;
     }
+
+    public function getBillingFirstName(): ?string
+    {
+        return $this->billingFirstName;
+    }
+
+    public function setBillingFirstName(?string $billingFirstName): self
+    {
+        $this->billingFirstName = $billingFirstName;
+        return $this;
+    }
+
+    public function getBillingLastName(): ?string
+    {
+        return $this->billingLastName;
+    }
+
+    public function setBillingLastName(?string $billingLastName): self
+    {
+        $this->billingLastName = $billingLastName;
+        return $this;
+    }
+
+    public function getBillingAddress(): ?string
+    {
+        return $this->billingAddress;
+    }
+
+    public function setBillingAddress(?string $billingAddress): self
+    {
+        $this->billingAddress = $billingAddress;
+        return $this;
+    }
+
+    public function getBillingCity(): ?string
+    {
+        return $this->billingCity;
+    }
+
+    public function setBillingCity(?string $billingCity): self
+    {
+        $this->billingCity = $billingCity;
+        return $this;
+    }
+
+    public function getBillingPostalCode(): ?string
+    {
+        return $this->billingPostalCode;
+    }
+
+    public function setBillingPostalCode(?string $billingPostalCode): self
+    {
+        $this->billingPostalCode = $billingPostalCode;
+        return $this;
+    }
+
+    public function getBillingCountry(): ?string
+    {
+        return $this->billingCountry;
+    }
+
+    public function setBillingCountry(?string $billingCountry): self
+    {
+        $this->billingCountry = $billingCountry;
+        return $this;
+    }
+
+    public function getCompany(): ?string
+    {
+        return $this->company;
+    }
+
+    public function setCompany(?string $company): self
+    {
+        $this->company = $company;
+        return $this;
+    }
+
+    public function getBillingCompany(): ?string
+    {
+        return $this->billingCompany;
+    }
+
+    public function setBillingCompany(?string $billingCompany): self
+    {
+        $this->billingCompany = $billingCompany;
+        return $this;
+    }
+
     public function getPudoId(): ?string
     {
         return $this->pudoId;

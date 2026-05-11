@@ -34,12 +34,19 @@
         </div>
 
         <div style="margin-top: 30px; font-size: 13px;">
-            <strong>Destinataire :</strong><br>
+            <strong>Facturé à :</strong><br>
             {% if order.shippingInfo is defined and order.shippingInfo is not null %}
-                {{ order.shippingInfo.firstName|default('') }} {{ order.shippingInfo.lastName|default('') }}<br>
-                {{ order.shippingInfo.address|default('') }}<br>
+                {# --- AJOUT DU NOM DE L'ENTREPRISE (SI RENSEIGNÉ) --- #}
+                {% if order.shippingInfo.billingCompany|default(order.shippingInfo.company) %}
+                    <strong>{{ order.shippingInfo.billingCompany|default(order.shippingInfo.company) }}</strong><br>
+                {% endif %}
+                {{ order.shippingInfo.billingFirstName|default(order.shippingInfo.firstName)|default('') }} 
+                {{ order.shippingInfo.billingLastName|default(order.shippingInfo.lastName)|default('')|upper }}<br>
+                {{ order.shippingInfo.billingAddress|default(order.shippingInfo.address)|default('') }}<br>
                 {{ order.shippingInfo.phone|default('') }}<br>
-                {{ order.shippingInfo.postalCode|default('') }} {{ order.shippingInfo.city|default('') }}
+                {{ order.shippingInfo.billingPostalCode|default(order.shippingInfo.postalCode)|default('') }} 
+                {{ order.shippingInfo.billingCity|default(order.shippingInfo.city)|default('') }}<br>
+                {{ order.shippingInfo.billingCountry|default(order.shippingInfo.country)|default('') }}
             {% else %}
                 Client non renseigné
             {% endif %}
