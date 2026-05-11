@@ -168,6 +168,7 @@ class OrderController extends AbstractController
                 'firstName' => $shipping?->getFirstName(),
                 'lastName' => $shipping?->getLastName(),
                 'email' => $shipping?->getEmail(),
+                'company' => $shipping?->getCompany(),
                 'phone' => $shipping?->getPhone() ?? 'N/A',
                 'address' => $shipping?->getAddress(),
                 'city' => $shipping?->getCity(),
@@ -179,6 +180,16 @@ class OrderController extends AbstractController
                 'pudoPostalCode' => $shipping?->getPudoPostalCode(),
                 'pudoCity' => $shipping?->getPudoCity(),
                 'instructions' => $shipping?->getInstructions(),
+            ],
+
+            'billingInfo' => [
+                'company' => $shipping?->getBillingCompany() ?? $shipping?->getCompany(),
+                'firstName' => $shipping?->getBillingFirstName() ?? $shipping?->getFirstName(),
+                'lastName' => $shipping?->getBillingLastName() ?? $shipping?->getLastName(),
+                'address' => $shipping?->getBillingAddress() ?? $shipping?->getAddress(),
+                'postalCode' => $shipping?->getBillingPostalCode() ?? $shipping?->getPostalCode(),
+                'city' => $shipping?->getBillingCity() ?? $shipping?->getCity(),
+                'country' => $shipping?->getBillingCountry() ?? $shipping?->getCountry() ?? 'FR',
             ],
 
             'items' => array_map(function ($item) {
@@ -246,12 +257,20 @@ class OrderController extends AbstractController
         $shippingInfo->setEmail($data['email'] ?? null);
         $shippingInfo->setFirstName($data['firstName'] ?? '');
         $shippingInfo->setLastName($data['lastName'] ?? '');
+        $shippingInfo->setCompany($data['company'] ?? null);
         $shippingInfo->setAddress($data['address'] ?? '');
         $shippingInfo->setPostalCode($data['postalCode'] ?? '');
         $shippingInfo->setCity($data['city'] ?? '');
         $shippingInfo->setCountry($data['country'] ?? 'FR');
         $shippingInfo->setPhone($data['phone'] ?? null);
         $shippingInfo->setInstructions($data['instructions'] ?? null);
+        $shippingInfo->setBillingFirstName($data['billingFirstName'] ?? $data['firstName'] ?? '');
+        $shippingInfo->setBillingLastName($data['billingLastName'] ?? $data['lastName'] ?? '');
+        $shippingInfo->setBillingAddress($data['billingAddress'] ?? $data['address'] ?? '');
+        $shippingInfo->setBillingPostalCode($data['billingPostalCode'] ?? $data['postalCode'] ?? '');
+        $shippingInfo->setBillingCity($data['billingCity'] ?? $data['city'] ?? '');
+        $shippingInfo->setBillingCountry($data['billingCountry'] ?? $data['country'] ?? 'FR');
+        $shippingInfo->setBillingCompany($data['billingCompany'] ?? $data['company'] ?? null);
 
         // Handle Pick-up Point (PUDO) data if applicable
         if (isset($data['pudoId'])) {
