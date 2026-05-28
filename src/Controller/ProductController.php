@@ -156,6 +156,38 @@ class ProductController extends AbstractController
             }
         }
 
+        if (array_key_exists('sale_price', $data)) {
+            $salePrice = $data['sale_price'] !== '' ? $data['sale_price'] : null;
+            $product->setSalePrice($salePrice);
+            foreach ($product->getVariants() as $variant) {
+                $variant->setSalePrice($salePrice);
+            }
+        }
+
+        if (array_key_exists('special_price_from', $data)) {
+            $dateFrom = !empty($data['special_price_from']) ? new \DateTimeImmutable($data['special_price_from']) : null;
+            $product->setSpecialPriceFrom($dateFrom);
+            foreach ($product->getVariants() as $variant) {
+                $variant->setSpecialPriceFrom($dateFrom);
+            }
+        }
+
+        if (array_key_exists('special_price_to', $data)) {
+            $dateTo = !empty($data['special_price_to']) ? new \DateTimeImmutable($data['special_price_to']) : null;
+            $product->setSpecialPriceTo($dateTo);
+            foreach ($product->getVariants() as $variant) {
+                $variant->setSpecialPriceTo($dateTo);
+            }
+        }
+
+        if (array_key_exists('promo_text', $data)) {
+            $promoText = $data['promo_text'] !== '' ? $data['promo_text'] : null;
+            $product->setPromoText($promoText);
+            foreach ($product->getVariants() as $variant) {
+                $variant->setPromoText($promoText);
+            }
+        }
+
         if (array_key_exists('stock', $data)) $product->setStock($data['stock'] !== null ? (int)$data['stock'] : 0);
         if (array_key_exists('weight', $data)) $product->setWeight($data['weight'] !== null ? (float)$data['weight'] : 0.0);
         if (array_key_exists('featured', $data)) $product->setFeatured((bool)$data['featured']);
@@ -261,6 +293,14 @@ class ProductController extends AbstractController
             'slug' => $product->getSlug(),
             'sku' => $product->getSku(),
             'price' => $product->getPrice(),
+            'sale_price' => $product->getSalePrice(),
+            'special_price_from' => $product->getSpecialPriceFrom() ? $product->getSpecialPriceFrom()->format('c') : null,
+            'special_price_to' => $product->getSpecialPriceTo() ? $product->getSpecialPriceTo()->format('c') : null,
+            'promo_text' => $product->getPromoText(),
+            'final_price' => $product->getFinalPrice(),
+            'is_on_sale' => $product->isOnSale(),
+            'discount_label' => $product->isOnSale() ? ($product->getPromoText() ?: '-' . round((((float)$product->getPrice() - (float)$product->getSalePrice()) / (float)$product->getPrice()) * 100) . '%') : null,
+            'promo_ends_at' => $product->getSpecialPriceTo() ? $product->getSpecialPriceTo()->format('c') : null,
             'stock' => $totalStock,
             'main_image' => $product->getMainImage(),
             'category_slugs' => $product->getCategories()->map(fn($c) => $c->getSlug())->toArray(),
@@ -290,6 +330,14 @@ class ProductController extends AbstractController
             'excerpt' => $p->getExcerpt(),
             'sku' => $p->getSku(),
             'price' => $p->getPrice(),
+            'sale_price' => $p->getSalePrice(),
+            'special_price_from' => $p->getSpecialPriceFrom() ? $p->getSpecialPriceFrom()->format('c') : null,
+            'special_price_to' => $p->getSpecialPriceTo() ? $p->getSpecialPriceTo()->format('c') : null,
+            'promo_text' => $p->getPromoText(),
+            'final_price' => $p->getFinalPrice(),
+            'is_on_sale' => $p->isOnSale(),
+            'discount_label' => $p->isOnSale() ? ($p->getPromoText() ?: '-' . round((((float)$p->getPrice() - (float)$p->getSalePrice()) / (float)$p->getPrice()) * 100) . '%') : null,
+            'promo_ends_at' => $p->getSpecialPriceTo() ? $p->getSpecialPriceTo()->format('c') : null,
             'weight' => $p->getWeight(),
             'featured' => $p->isFeatured(),
             'main_image' => $formatImagePath($p->getMainImage()),
@@ -304,6 +352,14 @@ class ProductController extends AbstractController
                 'name' => $v->getName(),
                 'sku' => $v->getSku(),
                 'price' => $v->getPrice(),
+                'sale_price' => $v->getSalePrice(),
+                'special_price_from' => $v->getSpecialPriceFrom() ? $v->getSpecialPriceFrom()->format('c') : null,
+                'special_price_to' => $v->getSpecialPriceTo() ? $v->getSpecialPriceTo()->format('c') : null,
+                'promo_text' => $v->getPromoText(),
+                'final_price' => $v->getFinalPrice(),
+                'is_on_sale' => $v->isOnSale(),
+                'discount_label' => $v->isOnSale() ? ($v->getPromoText() ?: '-' . round((((float)$v->getPrice() - (float)$v->getSalePrice()) / (float)$v->getPrice()) * 100) . '%') : null,
+                'promo_ends_at' => $v->getSpecialPriceTo() ? $v->getSpecialPriceTo()->format('c') : null,
                 'stock' => $v->getStock(),
                 'image' => $formatImagePath($v->getImage()),
                 'active' => $v->isActive(),

@@ -95,6 +95,30 @@ class ProductVariantController extends AbstractController
                 $variant->setPrice($product->getPrice());
             }
 
+            if (array_key_exists('sale_price', $data)) {
+                $variant->setSalePrice($data['sale_price'] !== '' ? $data['sale_price'] : null);
+            } else {
+                $variant->setSalePrice($product->getSalePrice());
+            }
+
+            if (array_key_exists('special_price_from', $data)) {
+                $variant->setSpecialPriceFrom(!empty($data['special_price_from']) ? new \DateTimeImmutable($data['special_price_from']) : null);
+            } else {
+                $variant->setSpecialPriceFrom($product->getSpecialPriceFrom());
+            }
+
+            if (array_key_exists('special_price_to', $data)) {
+                $variant->setSpecialPriceTo(!empty($data['special_price_to']) ? new \DateTimeImmutable($data['special_price_to']) : null);
+            } else {
+                $variant->setSpecialPriceTo($product->getSpecialPriceTo());
+            }
+
+            if (array_key_exists('promo_text', $data)) {
+                $variant->setPromoText($data['promo_text'] !== '' ? $data['promo_text'] : null);
+            } else {
+                $variant->setPromoText($product->getPromoText());
+            }
+
             // --- 2. WEIGHT INHERITANCE LOGIC ---
             // Use provided weight or fallback to parent product weight
             if (isset($data['weight']) && $data['weight'] !== '' && $data['weight'] !== null) {
@@ -127,6 +151,10 @@ class ProductVariantController extends AbstractController
         if (isset($data['name'])) $variant->setName($data['name']);
         if (isset($data['sku'])) $variant->setSku($data['sku']);
         if (isset($data['price'])) $variant->setPrice($data['price']);
+        if (array_key_exists('sale_price', $data)) $variant->setSalePrice($data['sale_price'] !== '' ? $data['sale_price'] : null);
+        if (array_key_exists('special_price_from', $data)) $variant->setSpecialPriceFrom(!empty($data['special_price_from']) ? new \DateTimeImmutable($data['special_price_from']) : null);
+        if (array_key_exists('special_price_to', $data)) $variant->setSpecialPriceTo(!empty($data['special_price_to']) ? new \DateTimeImmutable($data['special_price_to']) : null);
+        if (array_key_exists('promo_text', $data)) $variant->setPromoText($data['promo_text'] !== '' ? $data['promo_text'] : null);
         if (isset($data['stock'])) $variant->setStock($data['stock']);
         if (isset($data['image'])) $variant->setImage($data['image']);
         if (isset($data['attributes'])) $variant->setAttributes($data['attributes']);
@@ -198,6 +226,14 @@ class ProductVariantController extends AbstractController
             'name' => $v->getName(),
             'sku' => $v->getSku(),
             'price' => $v->getPrice(),
+            'sale_price' => $v->getSalePrice(),
+            'special_price_from' => $v->getSpecialPriceFrom() ? $v->getSpecialPriceFrom()->format('c') : null,
+            'special_price_to' => $v->getSpecialPriceTo() ? $v->getSpecialPriceTo()->format('c') : null,
+            'promo_text' => $v->getPromoText(),
+            'final_price' => $v->getFinalPrice(),
+            'is_on_sale' => $v->isOnSale(),
+            'discount_label' => $v->isOnSale() ? ($v->getPromoText() ?: '-' . round((((float)$v->getPrice() - (float)$v->getSalePrice()) / (float)$v->getPrice()) * 100) . '%') : null,
+            'promo_ends_at' => $v->getSpecialPriceTo() ? $v->getSpecialPriceTo()->format('c') : null,
             'stock' => $v->getStock(),
             'image' => $formatImagePath($v->getImage()),
             'attributes' => $v->getAttributes(),
