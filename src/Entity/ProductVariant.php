@@ -28,6 +28,18 @@ class ProductVariant
     #[ORM\Column(type: 'float', nullable: true)]
     private ?float $weight = null;
 
+    #[ORM\Column(type: 'decimal', precision: 10, scale: 2, nullable: true)]
+    private ?string $salePrice = null;
+
+    #[ORM\Column(type: 'datetime', nullable: true)]
+    private ?\DateTimeInterface $specialPriceFrom = null;
+
+    #[ORM\Column(type: 'datetime', nullable: true)]
+    private ?\DateTimeInterface $specialPriceTo = null;
+
+    #[ORM\Column(length: 50, nullable: true)]
+    private ?string $promoText = null;
+
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $image = null;
 
@@ -110,6 +122,76 @@ class ProductVariant
     {
         $this->weight = $weight;
         return $this;
+    }
+
+    public function getSalePrice(): ?string
+    {
+        return $this->salePrice;
+    }
+
+    public function setSalePrice(?string $salePrice): self
+    {
+        $this->salePrice = $salePrice;
+        return $this;
+    }
+
+    public function getSpecialPriceFrom(): ?\DateTimeInterface
+    {
+        return $this->specialPriceFrom;
+    }
+
+    public function setSpecialPriceFrom(?\DateTimeInterface $specialPriceFrom): self
+    {
+        $this->specialPriceFrom = $specialPriceFrom;
+        return $this;
+    }
+
+    public function getSpecialPriceTo(): ?\DateTimeInterface
+    {
+        return $this->specialPriceTo;
+    }
+
+    public function setSpecialPriceTo(?\DateTimeInterface $specialPriceTo): self
+    {
+        $this->specialPriceTo = $specialPriceTo;
+        return $this;
+    }
+
+    public function getPromoText(): ?string
+    {
+        return $this->promoText;
+    }
+
+    public function setPromoText(?string $promoText): self
+    {
+        $this->promoText = $promoText;
+        return $this;
+    }
+
+    public function isOnSale(): bool
+    {
+        if ($this->salePrice === null || $this->price === null) {
+            return false;
+        }
+
+        if ((float) $this->salePrice >= (float) $this->price) {
+            return false;
+        }
+
+        $now = new \DateTimeImmutable();
+        if ($this->specialPriceFrom !== null && $now < $this->specialPriceFrom) {
+            return false;
+        }
+        if ($this->specialPriceTo !== null && $now > $this->specialPriceTo) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public function getFinalPrice(): string
+    {
+        return $this->isOnSale() ? $this->salePrice : ($this->price ?? '0.00');
     }
 
     // Image

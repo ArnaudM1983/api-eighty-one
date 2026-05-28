@@ -416,7 +416,11 @@ class OrderController extends AbstractController
             $orderItem->setProduct($cartItem->getProduct());
             $orderItem->setVariant($cartItem->getVariant());
             $orderItem->setQuantity($cartItem->getQuantity());
-            $orderItem->setPrice($cartItem->getPrice() ?? '0.00');
+            
+            // Recalculate the secure final price from the product entity to prevent tampering or outdated prices
+            $actualFinalPrice = $cartItem->getVariant() ? $cartItem->getVariant()->getFinalPrice() : $cartItem->getProduct()->getFinalPrice();
+            $orderItem->setPrice((string)$actualFinalPrice);
+            
             $orderItem->setWeight($cartItem->getWeight() ?? 0.0);
             $order->addItem($orderItem);
         }

@@ -108,7 +108,7 @@ class CartController extends AbstractController
             ], 400);
         }
 
-        $price = $variant ? $variant->getPrice() : $product->getPrice();
+        $price = $variant ? $variant->getFinalPrice() : $product->getFinalPrice();
         $unitWeight = $variant ? $variant->getWeight() : $product->getWeight();
 
         // Check if item already exists in the cart
