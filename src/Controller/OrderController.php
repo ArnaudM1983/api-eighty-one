@@ -233,7 +233,7 @@ class OrderController extends AbstractController
      * API: Update Shipping Information and Recalculate Totals
      */
     #[Route('/{id}/shipping', name: 'api_order_update_shipping', methods: ['POST'])]
-    public function updateShippingInfo(Order $order, Request $request): JsonResponse
+    public function updateShippingInfo(Order $order, Request $request, \Symfony\Contracts\HttpClient\HttpClientInterface $httpClient): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
 
@@ -241,7 +241,29 @@ class OrderController extends AbstractController
             return $this->json(['error' => 'Action non autorisée'], 403);
         }
 
+        // Validate delivery country is strictly France
+        $country = trim($data['country'] ?? '');
+        if (empty($country) || !in_array(strtoupper($country), ['FR', 'FRANCE'])) {
+            return $this->json(['error' => 'Les livraisons physiques sont possibles uniquement en France.'], 400);
+        }
+
         $method = $data['shippingMethod'] ?? 'pickup';
+
+        // Additional validation: Check if postal code is a real French postal code
+        if (in_array($method, ['colissimo_ss', 'colissimo_as'])) {
+            $postalCode = trim($data['postalCode'] ?? '');
+            if (!empty($postalCode)) {
+                try {
+                    $response = $httpClient->request('GET', 'https://geo.api.gouv.fr/communes?codePostal=' . urlencode($postalCode));
+                    $communes = $response->toArray(false);
+                    if (empty($communes)) {
+                        return $this->json(['error' => 'Le code postal saisi n\'est pas reconnu comme un code postal français valide.'], 400);
+                    }
+                } catch (\Exception $e) {
+                    // Ignore exception to not block checkout if the external API is down
+                }
+            }
+        }
 
         $order->setShippingMethod($method);
         $order->setShippingCost($data['shippingCost'] ?? 0);
@@ -486,7 +508,13 @@ class OrderController extends AbstractController
         $data = json_decode($request->getContent(), true);
         $weightInKg = (float)($data['totalWeight'] ?? 0.0);
         $modeCode = $data['modeCode'] ?? null;
-        $countryCode = $data['countryCode'] ?? 'FR';
+        
+        $countryCode = strtoupper(trim($data['countryCode'] ?? 'FR'));
+        if ($countryCode !== 'FR' && $countryCode !== 'FRANCE') {
+            return $this->json(['error' => 'Les modes de livraison sont uniquement disponibles en France.'], 400);
+        }
+        $countryCode = 'FR'; // Standardize to FR for service
+
 
         try {
             $cost = $this->tariffCalculatorService->calculateShippingCost($weightInKg, $modeCode, $countryCode);
@@ -504,8 +532,14 @@ class OrderController extends AbstractController
     {
         $data = json_decode($request->getContent(), true);
         $postalCode = $data['postalCode'] ?? null;
-        $countryCode = $data['countryCode'] ?? 'FR';
         $weightInKg = (float)($data['totalWeight'] ?? 0.0);
+        
+        $countryCode = strtoupper(trim($data['countryCode'] ?? 'FR'));
+        if ($countryCode !== 'FR' && $countryCode !== 'FRANCE') {
+            return $this->json(['error' => 'Les points relais sont uniquement disponibles en France.'], 400);
+        }
+        $countryCode = 'FR';
+
 
         try {
             $pudos = $this->mondialRelayService->searchPointsRelais($postalCode, $countryCode, $weightInKg);
@@ -525,8 +559,14 @@ class OrderController extends AbstractController
         $address = $data['address'] ?? '';
         $zipCode = $data['postalCode'] ?? $data['zipCode'] ?? null;
         $city = $data['city'] ?? null;
-        $countryCode = $data['countryCode'] ?? 'FR';
         $weightInKg = (float)($data['totalWeight'] ?? 0.0);
+
+        $countryCode = strtoupper(trim($data['countryCode'] ?? 'FR'));
+        if ($countryCode !== 'FR' && $countryCode !== 'FRANCE') {
+            return $this->json(['error' => 'Les points de retrait sont uniquement disponibles en France.'], 400);
+        }
+        $countryCode = 'FR';
+
 
         try {
             $pudos = $this->colissimoService->searchPointsRetrait($address, $zipCode, $city, $countryCode, $weightInKg);
