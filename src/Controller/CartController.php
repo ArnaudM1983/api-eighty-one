@@ -201,6 +201,7 @@ class CartController extends AbstractController
                 'itemId' => $i->getId(),
                 'productId' => $i->getProduct()->getId(),
                 'variantId' => $i->getVariant()?->getId(),
+                'variantName' => $i->getVariant()?->getName(),
                 'name' => $i->getProduct()->getName(),
                 'quantity' => $i->getQuantity(),
                 'price' => $i->getPrice(),
