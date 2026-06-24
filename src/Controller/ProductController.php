@@ -189,7 +189,13 @@ class ProductController extends AbstractController
         }
 
         if (array_key_exists('stock', $data)) $product->setStock($data['stock'] !== null ? (int)$data['stock'] : 0);
-        if (array_key_exists('weight', $data)) $product->setWeight($data['weight'] !== null ? (float)$data['weight'] : 0.0);
+        if (array_key_exists('weight', $data)) {
+            $weight = $data['weight'] !== null ? (float)$data['weight'] : 0.0;
+            $product->setWeight($weight);
+            foreach ($product->getVariants() as $variant) {
+                $variant->setWeight($weight);
+            }
+        }
         if (array_key_exists('featured', $data)) $product->setFeatured((bool)$data['featured']);
         if (isset($data['main_image'])) $product->setMainImage($data['main_image']);
         if (isset($data['faq']) && is_array($data['faq'])) $product->setFaq($data['faq']);

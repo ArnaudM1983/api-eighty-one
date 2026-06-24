@@ -156,6 +156,14 @@ class ProductVariantController extends AbstractController
         if (array_key_exists('special_price_to', $data)) $variant->setSpecialPriceTo(!empty($data['special_price_to']) ? new \DateTimeImmutable($data['special_price_to']) : null);
         if (array_key_exists('promo_text', $data)) $variant->setPromoText($data['promo_text'] !== '' ? $data['promo_text'] : null);
         if (isset($data['stock'])) $variant->setStock($data['stock']);
+        if (array_key_exists('weight', $data)) {
+            if ($data['weight'] !== '' && $data['weight'] !== null) {
+                $variant->setWeight((float)$data['weight']);
+            } else {
+                $product = $variant->getProduct();
+                $variant->setWeight($product ? $product->getWeight() : 0.0);
+            }
+        }
         if (isset($data['image'])) $variant->setImage($data['image']);
         if (isset($data['attributes'])) $variant->setAttributes($data['attributes']);
         if (isset($data['active'])) $variant->setActive((bool)$data['active']);
@@ -235,6 +243,7 @@ class ProductVariantController extends AbstractController
             'discount_label' => $v->isOnSale() ? ($v->getPromoText() ?: '-' . round((((float)$v->getPrice() - (float)$v->getSalePrice()) / (float)$v->getPrice()) * 100) . '%') : null,
             'promo_ends_at' => $v->getSpecialPriceTo() ? $v->getSpecialPriceTo()->format('c') : null,
             'stock' => $v->getStock(),
+            'weight' => $v->getWeight(),
             'image' => $formatImagePath($v->getImage()),
             'attributes' => $v->getAttributes(),
             'position' => $v->getPosition(), 
