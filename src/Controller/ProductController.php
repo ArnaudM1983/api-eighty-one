@@ -110,11 +110,20 @@ class ProductController extends AbstractController
         // On utilise la même logique de calcul que le serializer
         $variants = $product->getVariants();
         $totalStock = count($variants) > 0 ? 0 : $product->getStock();
+        
+        $variantsStock = [];
         foreach ($variants as $v) {
             $totalStock += $v->getStock();
+            $variantsStock[] = [
+                'id' => $v->getId(),
+                'stock' => $v->getStock()
+            ];
         }
 
-        return $this->json(['stock' => $totalStock]);
+        return $this->json([
+            'stock' => $totalStock,
+            'variants' => $variantsStock
+        ]);
     }
 
     /**
