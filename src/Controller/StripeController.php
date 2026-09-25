@@ -38,6 +38,21 @@ class StripeController extends AbstractController
             $em->flush(); 
         }
 
+        // Verify stock before generating Stripe intent to prevent race conditions
+        foreach ($order->getItems() as $item) {
+            $product = $item->getProduct();
+            $variant = $item->getVariant();
+            
+            $availableStock = $variant ? $variant->getStock() : $product->getStock();
+            if ($availableStock < $item->getQuantity()) {
+                $name = $variant ? $variant->getName() : $product->getName();
+                return $this->json([
+                    'error' => 'Rupture de stock', 
+                    'message' => 'Le produit "' . $name . '" n\'est plus disponible en quantité suffisante.'
+                ], 400);
+            }
+        }
+
         Stripe::setApiKey($this->getParameter('stripe_secret_key'));
         
         // 3. Guaranteed calculation with shipping fees

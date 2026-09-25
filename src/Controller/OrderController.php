@@ -434,9 +434,22 @@ class OrderController extends AbstractController
         foreach ($cart->getItems() as $cartItem) {
             if (!$cartItem->getProduct() || $cartItem->getQuantity() <= 0) continue;
 
+            $product = $cartItem->getProduct();
+            $variant = $cartItem->getVariant();
+            
+            // Stock validation
+            $availableStock = $variant ? $variant->getStock() : $product->getStock();
+            if ($availableStock < $cartItem->getQuantity()) {
+                $name = $variant ? $variant->getName() : $product->getName();
+                return $this->json([
+                    'error' => 'Rupture de stock', 
+                    'message' => 'Le produit "' . $name . '" n\'est plus disponible en quantité suffisante.'
+                ], 400);
+            }
+
             $orderItem = new OrderItem();
-            $orderItem->setProduct($cartItem->getProduct());
-            $orderItem->setVariant($cartItem->getVariant());
+            $orderItem->setProduct($product);
+            $orderItem->setVariant($variant);
             $orderItem->setQuantity($cartItem->getQuantity());
             
             // Recalculate the secure final price from the product entity to prevent tampering or outdated prices
