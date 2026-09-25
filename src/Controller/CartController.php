@@ -196,6 +196,7 @@ class CartController extends AbstractController
             $productImage = $i->getProduct()->getMainImage();
             $unitWeight = $i->getWeight() ?? 0.0;
             $totalWeight = $i->getTotalWeight();
+            $availableStock = $i->getVariant() ? $i->getVariant()->getStock() : $i->getProduct()->getStock();
 
             return [
                 'itemId' => $i->getId(),
@@ -208,6 +209,7 @@ class CartController extends AbstractController
                 'total' => $i->getPrice() * $i->getQuantity(),
                 'weight' => $unitWeight,
                 'totalWeight' => $totalWeight,
+                'stock' => $availableStock,
 
                 'image' => $formatImagePath($variantImage ?? $productImage)
             ];
